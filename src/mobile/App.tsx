@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { useMobileStore } from "./store/mobileStore";
@@ -57,15 +57,6 @@ export function App() {
     [connect]
   );
 
-  useEffect(() => {
-    const loc = window.location;
-    if (loc.port && loc.hostname !== "localhost" && loc.hostname !== "127.0.0.1") {
-      connect(loc.host);
-    } else {
-      const saved = localStorage.getItem("th-mobile-host");
-      if (saved) connect(saved);
-    }
-  }, [connect]);
 
   const handleTerminalData = useCallback(
     (data: string) => {
