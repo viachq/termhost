@@ -1,0 +1,5 @@
+[window]
+decorations = "None"
+padding.x = 4
+padding.y = 4
+dynamic_padding = true

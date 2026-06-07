@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>TerminalHub</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{--bg:#0c0c0c;--surface:#141414;--border:#2a2a2a;--accent:#e94560;--text:#d4d4d4;--dim:#6a6a6a}
+    body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+
+    .topbar{background:var(--surface);padding:8px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+    .topbar h1{font-size:14px;font-weight:600}
+    .conn-info{font-size:10px;color:var(--dim);display:flex;align-items:center;gap:5px}
+    .conn-dot{width:7px;height:7px;border-radius:50%;background:var(--dim)}
+    .conn-info.on .conn-dot{background:#2ecc71}
+
+    .connect-page{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;gap:16px}
+    .connect-page h2{font-size:18px;font-weight:600}
+    .connect-page p{font-size:12px;color:var(--dim);text-align:center;max-width:280px}
+    .connect-row{display:flex;gap:8px;width:100%;max-width:320px}
+    .connect-row input{flex:1;padding:12px;background:#1e1e1e;border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;text-align:center}
+    .connect-row input:focus{outline:none;border-color:var(--accent)}
+    .connect-row button{padding:12px 24px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:15px;font-weight:600}
+
+    .terminal-page{flex:1;display:none;flex-direction:column;min-height:0}
+    .tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;flex-shrink:0}
+    .tab{padding:8px 14px;color:var(--dim);font-size:11px;white-space:nowrap;cursor:pointer;border-bottom:2px solid transparent;flex-shrink:0}
+    .tab.active{color:var(--text);border-bottom-color:var(--accent)}
+    .xterm-wrap{flex:1;min-height:0;position:relative;background:#0a0a0a}
+    .xterm-wrap .xterm{padding:4px}
+
+    .toolbar{display:flex;gap:3px;padding:5px 6px;background:var(--surface);border-top:1px solid var(--border);overflow-x:auto;flex-shrink:0}
+    .tbtn{padding:7px 11px;background:#1e1e1e;border:1px solid var(--border);border-radius:4px;color:#aaa;font-size:11px;font-family:'Cascadia Mono',monospace;white-space:nowrap;cursor:pointer;flex-shrink:0;-webkit-tap-highlight-color:transparent}
+    .tbtn:active{background:#333;color:#fff}
+    .tbtn.accent{background:rgba(233,69,96,0.15);border-color:rgba(233,69,96,0.3);color:var(--accent)}
+
+    .input-row{display:flex;gap:6px;padding:6px 8px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
+    .input-row input{flex:1;padding:10px 12px;background:#1e1e1e;border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'Cascadia Mono',monospace;font-size:14px}
+    .input-row input:focus{outline:none;border-color:var(--accent)}
+    .input-row button{padding:10px 18px;background:var(--accent);border:none;border-radius:6px;color:#fff;font-size:14px;font-weight:600}
+
+    .hidden{display:none!important}
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>TerminalHub</h1>
+    <div class="conn-info" id="conn-info"><span class="conn-dot"></span><span id="conn-text">Disconnected</span></div>
+  </div>
+
+  <div class="connect-page" id="connect-page">
+    <h2>Remote Terminal</h2>
+    <p>Enter your PC's address from TerminalHub Settings → Remote Access</p>
+    <div class="connect-row">
+      <input id="host" placeholder="192.168.x.x:9090" inputmode="url" autocapitalize="off" autocorrect="off">
+      <button id="conn-btn">Go</button>
+    </div>
+  </div>
+
+  <div class="terminal-page" id="terminal-page">
+    <div class="tabs" id="tabs"></div>
+    <div class="xterm-wrap" id="xterm-wrap"></div>
+    <div class="toolbar" id="toolbar">
+      <span class="tbtn" data-k="\x1b">Esc</span>
+      <span class="tbtn" data-k="\t">Tab</span>
+      <span class="tbtn accent" data-k="\x03">^C</span>
+      <span class="tbtn" data-k="\x04">^D</span>
+      <span class="tbtn" data-k="\x1a">^Z</span>
+      <span class="tbtn" data-k="\x1b[A">&uarr;</span>
+      <span class="tbtn" data-k="\x1b[B">&darr;</span>
+      <span class="tbtn" data-k="\x1b[D">&larr;</span>
+      <span class="tbtn" data-k="\x1b[C">&rarr;</span>
+      <span class="tbtn" data-k="\x01">^A</span>
+      <span class="tbtn" data-k="\x05">^E</span>
+      <span class="tbtn" data-k="\x0c">^L</span>
+    </div>
+    <div class="input-row">
+      <input id="cmd" placeholder="command..." autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false">
+      <button id="send-btn">Send</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
+  <script>
+    let ws=null, terminals=[], active=null;
+    const xtermInstances={};
+    const $=id=>document.getElementById(id);
+
+    const THEME={
+      background:'#0a0a0a',foreground:'#d4d4d4',cursor:'#e94560',cursorAccent:'#0a0a0a',
+      selectionBackground:'rgba(83,52,131,0.4)',
+      black:'#1e1e1e',red:'#f44747',green:'#6a9955',yellow:'#d7ba7d',blue:'#569cd6',
+      magenta:'#c586c0',cyan:'#4ec9b0',white:'#d4d4d4',
+      brightBlack:'#808080',brightRed:'#f44747',brightGreen:'#6a9955',brightYellow:'#d7ba7d',
+      brightBlue:'#569cd6',brightMagenta:'#c586c0',brightCyan:'#4ec9b0',brightWhite:'#ffffff'
+    };
+
+    $('conn-btn').onclick=doConnect;
+    $('host').onkeydown=e=>{if(e.key==='Enter')doConnect()};
+    $('send-btn').onclick=sendInput;
+    $('cmd').onkeydown=e=>{if(e.key==='Enter'){sendInput();e.preventDefault()}};
+
+    document.querySelectorAll('.tbtn').forEach(el=>{
+      el.ontouchstart=e=>{e.preventDefault();sendData(el.dataset.k)};
+      el.onclick=()=>sendData(el.dataset.k);
+    });
+
+    const saved=localStorage.getItem('th-host');
+    if(saved)$('host').value=saved;
+    if(location.port&&location.hostname!=='localhost'){
+      $('host').value=location.host;
+      doConnect();
+    }
+
+    function setStatus(on,text){
+      const ci=$('conn-info');
+      ci.className='conn-info'+(on?' on':'');
+      $('conn-text').textContent=text;
+    }
+
+    function doConnect(){
+      if(ws&&ws.readyState<2){ws.close();return}
+      const h=$('host').value.trim();
+      if(!h)return;
+      localStorage.setItem('th-host',h);
+      setStatus(false,'Connecting...');
+      try{ws=new WebSocket('ws://'+h+'/ws')}catch(e){setStatus(false,'Error');return}
+      ws.onopen=()=>{
+        setStatus(true,'Connected');
+        $('connect-page').classList.add('hidden');
+        $('terminal-page').style.display='flex';
+      };
+      ws.onclose=()=>{
+        setStatus(false,'Disconnected');
+        ws=null;
+        $('connect-page').classList.remove('hidden');
+        $('terminal-page').style.display='none';
+      };
+      ws.onerror=()=>setStatus(false,'Error');
+      ws.onmessage=e=>{
+        const msg=JSON.parse(e.data);
+        if(msg.type==='terminals'){
+          terminals=msg.data;
+          renderTabs();
+          if(terminals.length&&(!active||!terminals.find(t=>t.id===active)))
+            selectTerminal(terminals[0].id);
+        }else if(msg.type==='output'){
+          if(!xtermInstances[msg.id])createXterm(msg.id);
+          xtermInstances[msg.id].term.write(msg.data);
+        }
+      };
+    }
+
+    function createXterm(id){
+      const term=new Terminal({
+        fontSize:13,
+        fontFamily:"'Cascadia Mono','Courier New',monospace",
+        theme:THEME,
+        cursorBlink:true,
+        scrollback:5000,
+        convertEol:false
+      });
+      const fitAddon=new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+      term.loadAddon(new WebLinksAddon.WebLinksAddon());
+
+      const div=document.createElement('div');
+      div.style.cssText='position:absolute;top:0;left:0;right:0;bottom:0;display:none';
+      div.dataset.id=id;
+      $('xterm-wrap').appendChild(div);
+      term.open(div);
+
+      term.onData(data=>sendData(data));
+
+      xtermInstances[id]={term,fitAddon,div};
+      if(id===active)showXterm(id);
+    }
+
+    function showXterm(id){
+      Object.values(xtermInstances).forEach(x=>x.div.style.display='none');
+      if(xtermInstances[id]){
+        xtermInstances[id].div.style.display='block';
+        setTimeout(()=>{
+          xtermInstances[id].fitAddon.fit();
+          xtermInstances[id].term.focus();
+        },50);
+      }
+    }
+
+    function renderTabs(){
+      $('tabs').innerHTML=terminals.map(t=>
+        `<div class="tab${t.id===active?' active':''}" onclick="selectTerminal('${t.id}')">${t.label}</div>`
+      ).join('');
+    }
+
+    function selectTerminal(id){
+      active=id;
+      renderTabs();
+      if(!xtermInstances[id])createXterm(id);
+      showXterm(id);
+    }
+
+    function sendInput(){
+      const v=$('cmd').value;
+      if(!v)return;
+      sendData(v+'\r');
+      $('cmd').value='';
+    }
+
+    function sendData(data){
+      if(!active||!ws||ws.readyState!==1)return;
+      ws.send(JSON.stringify({type:'input',id:active,data}));
+    }
+
+    window.addEventListener('resize',()=>{
+      if(active&&xtermInstances[active]){
+        xtermInstances[active].fitAddon.fit();
+      }
+    });
+
+    new ResizeObserver(()=>{
+      if(active&&xtermInstances[active]){
+        xtermInstances[active].fitAddon.fit();
+      }
+    }).observe($('xterm-wrap'));
+  </script>
+</body>
+</html>

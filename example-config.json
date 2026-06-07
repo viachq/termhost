@@ -1,0 +1,55 @@
+{
+  "terminalPath": "wt.exe",
+  "workspaces": [
+    {
+      "name": "Claude Dev",
+      "terminals": [
+        {
+          "path": "C:\\Users\\viach\\projects\\frontend",
+          "command": "claude --dangerously-skip-permissions",
+          "title": "Claude Frontend"
+        },
+        {
+          "path": "C:\\Users\\viach\\projects\\backend",
+          "command": "claude --dangerously-skip-permissions",
+          "title": "Claude Backend"
+        },
+        {
+          "path": "C:\\Users\\viach\\projects\\frontend",
+          "command": "npm run dev",
+          "title": "Dev Server"
+        },
+        {
+          "path": "C:\\Users\\viach\\projects\\backend",
+          "command": "npm run dev",
+          "title": "API Server"
+        }
+      ]
+    },
+    {
+      "name": "Codex",
+      "terminals": [
+        {
+          "path": "C:\\Users\\viach\\projects\\app",
+          "command": "codex --yolo",
+          "title": "Codex 1"
+        },
+        {
+          "path": "C:\\Users\\viach\\projects\\app",
+          "command": "codex --yolo",
+          "title": "Codex 2"
+        }
+      ]
+    },
+    {
+      "name": "Single",
+      "terminals": [
+        {
+          "path": "C:\\Users\\viach\\desktop",
+          "command": "",
+          "title": "Main"
+        }
+      ]
+    }
+  ]
+}

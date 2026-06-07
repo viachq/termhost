@@ -1,0 +1,35 @@
+{
+  "productName": "TerminalHub",
+  "version": "0.1.0",
+  "identifier": "com.terminalhub.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run vite:dev",
+    "beforeBuildCommand": "npm run vite:build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "TerminalHub",
+        "width": 1400,
+        "height": 900,
+        "decorations": false,
+        "resizable": true,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
+  }
+}

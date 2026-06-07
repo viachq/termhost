@@ -1,0 +1,68 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0c0c0c;
+  --bg-sidebar: #141414;
+  --bg-surface: #1e1e1e;
+  --bg-terminal: #0a0a0a;
+  --bg-header: #111111;
+  --bg-tabs: #0e0e0e;
+  --accent: #e94560;
+  --accent2: #533483;
+  --accent-hover: #c73e54;
+  --text: #d4d4d4;
+  --text-dim: #6a6a6a;
+  --border: #2a2a2a;
+  --radius: 4px;
+  --focus-glow: rgba(233, 69, 96, 0.3);
+  --titlebar-h: 32px;
+  --color-danger: #c42b1c;
+  --color-activity: #f39c12;
+}
+
+html, body {
+  height: 100%;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* ── Light Theme ── */
+
+[data-ui-theme="light"] {
+  --bg: #f5f5f5;
+  --bg-sidebar: #e8e8e8;
+  --bg-surface: #dcdcdc;
+  --bg-terminal: #ffffff;
+  --bg-header: #ececec;
+  --bg-tabs: #e0e0e0;
+  --text: #1e1e1e;
+  --text-dim: #666666;
+  --border: #c8c8c8;
+  --focus-glow: rgba(233, 69, 96, 0.2);
+}
+
+[data-ui-theme="light"] [data-pane-focused="true"] .xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.15);
+}
+[data-ui-theme="light"] [data-pane-focused="true"] .xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,0.3);
+}
+
+/* ── Scrollbar — 1px invisible so xterm measures real width (avoids 15px fallback) ── */
+::-webkit-scrollbar { width: 0; height: 0; }
+.xterm .xterm-viewport::-webkit-scrollbar { width: 1px; }
+.xterm .xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+.xterm .xterm-viewport::-webkit-scrollbar-thumb { background: transparent; }
+
+/* Show scrollbar only on focused terminal pane */
+[data-pane-focused="true"] .xterm .xterm-viewport::-webkit-scrollbar { width: 6px; }
+[data-pane-focused="true"] .xterm .xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+[data-pane-focused="true"] .xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+  border-radius: 3px;
+}
+[data-pane-focused="true"] .xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.3);
+}

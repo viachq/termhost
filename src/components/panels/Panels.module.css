@@ -1,0 +1,662 @@
+.filesPanel {
+  width: 260px;
+  min-width: 180px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.filesPanelHeader {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  gap: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.filesSearch {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-main);
+  padding: 4px 8px;
+  font-size: 12px;
+  outline: none;
+  font-family: inherit;
+}
+
+.filesSearch:focus {
+  border-color: var(--accent);
+}
+
+.headerBtn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.headerBtn:hover {
+  color: var(--text-main);
+  background: var(--bg-hover);
+}
+
+.driveBar {
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.driveBtn {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-dim);
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.driveBtn:hover {
+  color: var(--text-main);
+}
+
+.driveBtnActive {
+  composes: driveBtn;
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow-x: auto;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: none;
+}
+
+.breadcrumb::-webkit-scrollbar {
+  display: none;
+}
+
+.breadcrumbSeg {
+  cursor: pointer;
+  padding: 1px 3px;
+  border-radius: 3px;
+}
+
+.breadcrumbSeg:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.breadcrumbCurrent {
+  color: var(--text-main);
+  cursor: default;
+}
+
+.breadcrumbCurrent:hover {
+  background: none;
+}
+
+.breadcrumbSep {
+  color: var(--text-dim);
+  margin: 0 1px;
+}
+
+.fileTree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.fileItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-main);
+  user-select: none;
+}
+
+.fileItem:hover {
+  background: var(--bg-hover);
+}
+
+.fileItemDir {
+  composes: fileItem;
+}
+
+.filesEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 32px 16px;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: center;
+}
+
+.fileIcon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.fileName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Browser Panel */
+
+.browserPanel {
+  width: 400px;
+  min-width: 250px;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.browserTabsBar {
+  display: flex;
+  align-items: center;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+  min-height: 30px;
+}
+
+.browserTabsBar::-webkit-scrollbar { display: none; }
+
+.browserTabItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  max-width: 160px;
+  min-width: 0;
+  flex-shrink: 0;
+  transition: background 0.1s;
+}
+
+.browserTabItem:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.browserTabItemActive {
+  background: var(--bg-panel);
+  color: var(--text-main);
+}
+
+.browserTabTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.browserTabClose {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 2px;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.browserTabItem:hover .browserTabClose {
+  opacity: 1;
+}
+
+.browserTabClose:hover {
+  color: var(--text-main);
+  background: var(--bg-hover);
+}
+
+.browserTabAdd {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+
+.browserTabAdd:hover {
+  color: var(--text-main);
+  background: var(--bg-hover);
+}
+
+.browserToolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.browserUrl {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-main);
+  padding: 4px 8px;
+  font-size: 12px;
+  outline: none;
+  font-family: inherit;
+}
+
+.browserUrl:focus {
+  border-color: var(--accent);
+}
+
+.browserBtn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.browserBtn:hover {
+  color: var(--text-main);
+  background: var(--bg-hover);
+}
+
+.browserContent {
+  flex: 1;
+  position: relative;
+}
+
+.browserLanding {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+}
+
+.browserLandingInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px;
+  max-width: 320px;
+  width: 100%;
+}
+
+.browserLandingIcon {
+  color: var(--text-dim);
+  opacity: 0.4;
+  margin-bottom: 8px;
+}
+
+.browserLandingTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.browserLandingDesc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.browserLandingBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 20px;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.browserLandingBtn:hover {
+  opacity: 0.9;
+}
+
+.browserHistory {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  margin-top: 16px;
+}
+
+.browserHistoryLabel {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.browserHistoryItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-main);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.browserHistoryItem:hover {
+  background: var(--bg-hover);
+}
+
+.browserHistoryItem svg {
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+
+.browserHistoryUrl {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Explorer Panel */
+
+.explorerPanel {
+  min-width: 200px;
+  max-width: 800px;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.explorerResize {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.explorerResize:hover,
+.explorerResize:active {
+  background: var(--accent);
+  opacity: 0.3;
+}
+
+.explorerTabs {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--bg-sidebar);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.explorerTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.explorerTab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.1s;
+  white-space: nowrap;
+}
+
+.explorerTab:hover {
+  color: var(--text-main);
+  background: var(--bg-surface);
+}
+
+.explorerTabActive {
+  composes: explorerTab;
+  color: var(--text-main);
+  border-bottom-color: var(--accent);
+}
+
+.explorerTabLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.explorerBadge {
+  font-size: 9px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 8px;
+  padding: 0 5px;
+  min-width: 14px;
+  text-align: center;
+  line-height: 15px;
+}
+
+
+.explorerContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Settings Panel */
+
+.settingsPanel {
+  width: 320px;
+  min-width: 260px;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.settingsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.settingsTitle {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+
+.settingsBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.settingsSection {
+  margin-bottom: 16px;
+}
+
+.settingsLabel {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  margin: 0 0 6px;
+}
+
+.settingsRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.settingsRow label {
+  min-width: 60px;
+  font-size: 12px;
+  color: var(--text-main);
+}
+
+.settingsRow select {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-main);
+  padding: 4px 6px;
+  font-size: 12px;
+  outline: none;
+}
+
+.settingsRow input[type="range"] {
+  flex: 1;
+}
+
+.settingsVal {
+  min-width: 36px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.settingsThemes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.settingsThemeCard {
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.settingsThemeCard:hover {
+  border-color: var(--text-dim);
+}
+
+.settingsThemeCardActive {
+  composes: settingsThemeCard;
+  border-color: var(--accent);
+}
+
+.settingsThemePreview {
+  padding: 6px 8px;
+  font-size: 10px;
+  font-family: monospace;
+  line-height: 1.3;
+}
+
+.settingsThemeName {
+  text-align: center;
+  padding: 3px;
+  font-size: 10px;
+  color: var(--text-main);
+  background: var(--bg-hover);
+}
+
+.settingsBtn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-main);
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.settingsBtn:hover {
+  background: var(--bg-hover);
+}
+
+.settingsBtnActive {
+  composes: settingsBtn;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.settingsWsUrl {
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: var(--bg-surface);
+  border-radius: 4px;
+  color: var(--text-main);
+  font-family: monospace;
+  font-size: 11px;
+  word-break: break-all;
+}

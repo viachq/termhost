@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-mobile/
+
+# Rust build
+src-tauri/target/
+
+# .NET build artifacts
+obj/
+bin/
+
+# Environment
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Tauri
+src-tauri/gen/
+
+# Logs
+*.log
+
+# Misc
+*.vtt
+transcript_clean.txt

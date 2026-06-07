@@ -1,0 +1,80 @@
+.pane {
+  background: var(--bg-terminal);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  border: 1px solid transparent;
+}
+
+.focused {
+  border-color: rgba(233, 69, 96, 0.45);
+}
+
+.header {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px 0 12px;
+  font-size: 13px;
+  color: #e0e0e0;
+  gap: 10px;
+  user-select: none;
+  z-index: 2;
+  border-radius: 8px;
+  background: rgba(20,20,20,0.88);
+  border: 1px solid rgba(255,255,255,0.1);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+.pane:hover > .header {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.paneLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.action {
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 5px;
+  color: #aaa;
+  transition: all 0.1s;
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+}
+.action:hover { background: rgba(255,255,255,0.12); color: #fff; }
+.actionClose:hover { color: var(--accent); background: rgba(233,69,96,0.15); }
+
+.xtermContainer {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  /* background is set dynamically to match xterm theme in TerminalInstance */
+}
