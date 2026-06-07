@@ -13,12 +13,13 @@
   "app": {
     "windows": [
       {
-        "title": "TerminalHub",
+        "title": "Agent Workspace",
         "width": 1400,
         "height": 900,
         "decorations": false,
         "resizable": true,
-        "dragDropEnabled": false
+        "dragDropEnabled": false,
+        "backgroundColor": "#0c0c0c"
       }
     ],
     "security": {
