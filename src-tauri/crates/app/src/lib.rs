@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::os::windows::process::CommandExt;
 use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::TrayIconBuilder;
 
 struct AppState {
     daemon: Arc<DaemonClient>,
@@ -350,6 +352,69 @@ pub fn run() {
                     }
                 }
             });
+
+            // Tray icon
+            let tray_handle = app.handle().clone();
+            let show = MenuItemBuilder::with_id("show", "Open Agent Workspace").build(app)?;
+            let kill_all = MenuItemBuilder::with_id("kill_all", "Kill all terminals").build(app)?;
+            let shutdown = MenuItemBuilder::with_id("shutdown", "Shutdown daemon & quit").build(app)?;
+            let menu = MenuBuilder::new(app)
+                .item(&show)
+                .separator()
+                .item(&kill_all)
+                .item(&shutdown)
+                .build()?;
+
+            let icon = tauri::image::Image::from_bytes(include_bytes!("../../../icons/icon.ico"))?;
+
+            TrayIconBuilder::new()
+                .icon(icon)
+                .tooltip("Agent Workspace")
+                .menu(&menu)
+                .on_menu_event(move |app_handle, event| {
+                    match event.id().as_ref() {
+                        "show" => {
+                            if let Some(w) = app_handle.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.unminimize();
+                                let _ = w.set_focus();
+                            }
+                        }
+                        "kill_all" => {
+                            let daemon = app_handle.state::<AppState>().daemon.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let seq = daemon.next_seq();
+                                if let Ok(DaemonResponse::TerminalList { terminals, .. }) =
+                                    daemon.request(&DaemonRequest::ListTerminals { seq }).await
+                                {
+                                    for t in terminals {
+                                        let seq = daemon.next_seq();
+                                        let _ = daemon.request(&DaemonRequest::Kill { seq, id: t.id }).await;
+                                    }
+                                }
+                            });
+                        }
+                        "shutdown" => {
+                            let daemon = app_handle.state::<AppState>().daemon.clone();
+                            let handle = app_handle.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let _ = daemon.fire_and_forget(&DaemonRequest::Shutdown).await;
+                                handle.exit(0);
+                            });
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(move |_tray, event| {
+                    if let tauri::tray::TrayIconEvent::DoubleClick { .. } = event {
+                        if let Some(w) = tray_handle.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.unminimize();
+                            let _ = w.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
 
             Ok(())
         })

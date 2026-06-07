@@ -15,11 +15,15 @@ export default function CloseDialog() {
   if (!visible) return null;
 
   const handleKeepAlive = () => {
-    getCurrentWindow().destroy();
+    getCurrentWindow().hide();
   };
 
   const handleKillAll = async () => {
     await shutdownDaemon().catch(() => {});
+    getCurrentWindow().destroy();
+  };
+
+  const handleCloseOnly = () => {
     getCurrentWindow().destroy();
   };
 
@@ -37,14 +41,17 @@ export default function CloseDialog() {
         <div className={s.actions}>
           <button className={s.btnSecondary} onClick={handleCancel}>Cancel</button>
           <button className={s.btnPrimary} onClick={handleKeepAlive}>
-            Keep alive
+            Hide to tray
+          </button>
+          <button className={s.btnSecondary} onClick={handleCloseOnly}>
+            Close window
           </button>
           <button className={s.btnDanger} onClick={handleKillAll}>
             Kill all & quit
           </button>
         </div>
         <div className={s.hint}>
-          "Keep alive" — terminals survive in daemon, reconnect on next launch
+          "Hide to tray" — window hides, terminals keep running, double-click tray to return
         </div>
       </div>
     </div>

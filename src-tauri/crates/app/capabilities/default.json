@@ -19,6 +19,11 @@
     "core:window:allow-set-focus",
     "core:window:allow-create",
     "core:webview:default",
-    "core:webview:allow-create-webview-window"
+    "core:webview:allow-create-webview-window",
+    "core:tray:default",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-unminimize",
+    "core:window:allow-destroy"
   ]
 }
