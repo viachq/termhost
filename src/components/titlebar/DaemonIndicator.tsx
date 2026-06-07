@@ -5,6 +5,27 @@ import s from "./DaemonIndicator.module.css";
 interface TerminalEntry {
   id: string;
   label: string;
+  cwd: string;
+  command: string;
+  title: string;
+  workspace: string;
+}
+
+function shortPath(p: string) {
+  if (!p) return "";
+  const parts = p.replace(/\\/g, "/").split("/");
+  return parts.length > 2 ? `.../${parts.slice(-2).join("/")}` : p;
+}
+
+function terminalDisplayName(t: TerminalEntry): { name: string; detail: string } {
+  if (t.command) {
+    const cmd = t.command.split(/\s+/)[0];
+    const base = cmd.includes("/") || cmd.includes("\\")
+      ? cmd.split(/[/\\]/).pop()!
+      : cmd;
+    return { name: base, detail: shortPath(t.cwd) };
+  }
+  return { name: "PowerShell", detail: shortPath(t.cwd) };
 }
 
 export default function DaemonIndicator() {
@@ -83,6 +104,14 @@ export default function DaemonIndicator() {
     setConfirming(null);
   };
 
+  // Group terminals by workspace
+  const grouped = new Map<string, TerminalEntry[]>();
+  for (const t of terminals) {
+    const ws = t.workspace || "No workspace";
+    if (!grouped.has(ws)) grouped.set(ws, []);
+    grouped.get(ws)!.push(t);
+  }
+
   return (
     <div className={s.wrapper} ref={menuRef}>
       <button
@@ -103,19 +132,32 @@ export default function DaemonIndicator() {
 
           {terminals.length > 0 && (
             <div className={s.terminalList}>
-              <div className={s.sectionLabel}>Background terminals ({terminals.length})</div>
-              {terminals.map((t) => (
-                <div key={t.id} className={s.terminalItem}>
-                  <span className={s.terminalId}>{t.label || t.id.slice(0, 8)}</span>
-                  <button
-                    className={s.killBtn}
-                    onClick={() => handleKillTerminal(t.id)}
-                    title="Kill terminal"
-                  >
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M2.5 2.5l5 5M7.5 2.5l-5 5" />
-                    </svg>
-                  </button>
+              {[...grouped.entries()].map(([wsName, items]) => (
+                <div key={wsName}>
+                  <div className={s.wsGroup}>
+                    <span className={s.wsName}>{wsName}</span>
+                    <span className={s.wsCount}>{items.length}</span>
+                  </div>
+                  {items.map((t) => {
+                    const { name, detail } = terminalDisplayName(t);
+                    return (
+                      <div key={t.id} className={s.terminalItem}>
+                        <div className={s.terminalInfo}>
+                          <span className={s.terminalName}>{name}</span>
+                          <span className={s.terminalDetail}>{detail}</span>
+                        </div>
+                        <button
+                          className={s.killBtn}
+                          onClick={() => handleKillTerminal(t.id)}
+                          title="Kill terminal"
+                        >
+                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <path d="M2.5 2.5l5 5M7.5 2.5l-5 5" />
+                          </svg>
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
             </div>

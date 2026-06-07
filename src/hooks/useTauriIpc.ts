@@ -89,7 +89,7 @@ export async function wsServerStatus(): Promise<{ running: boolean; ip: string }
   return invoke("ws_server_status");
 }
 
-export async function listTerminals(): Promise<{ id: string; label: string }[]> {
+export async function listTerminals(): Promise<{ id: string; label: string; cwd: string; command: string; title: string; workspace: string }[]> {
   return invoke("list_terminals");
 }
 

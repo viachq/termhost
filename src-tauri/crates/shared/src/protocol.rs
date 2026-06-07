@@ -6,6 +6,10 @@ use serde::{Deserialize, Serialize};
 pub struct TerminalInfo {
     pub id: String,
     pub label: String,
+    pub cwd: String,
+    pub command: String,
+    pub title: String,
+    pub workspace: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -21,6 +21,7 @@ struct DaemonState {
     pty_manager: std::sync::Mutex<PtyManager>,
     buffer_manager: std::sync::Mutex<BufferManager>,
     terminal_infos: std::sync::Mutex<Vec<TerminalInfo>>,
+    workspace_data: std::sync::Mutex<Vec<WorkspaceData>>,
     broadcast_tx: broadcast::Sender<(String, String)>,
     client_count: std::sync::atomic::AtomicU32,
     activity: Notify,
@@ -34,6 +35,7 @@ async fn main() {
         pty_manager: std::sync::Mutex::new(PtyManager::new()),
         buffer_manager: std::sync::Mutex::new(BufferManager::new()),
         terminal_infos: std::sync::Mutex::new(Vec::new()),
+        workspace_data: std::sync::Mutex::new(Vec::new()),
         broadcast_tx,
         client_count: std::sync::atomic::AtomicU32::new(0),
         activity: Notify::new(),
@@ -220,13 +222,24 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
                 cwd
             };
 
-            let label = command.as_deref()
-                .filter(|c| !c.is_empty())
-                .map(|c| if c.len() > 30 { format!("{}...", &c[..30]) } else { c.to_string() })
-                .unwrap_or_else(|| format!("PS: {}", resolved_cwd.split('\\').last().unwrap_or("shell")));
+            let cmd_str = command.as_deref().unwrap_or("").to_string();
+            let label = if cmd_str.is_empty() {
+                format!("PS: {}", resolved_cwd.split('\\').last().unwrap_or("shell"))
+            } else if cmd_str.len() > 30 {
+                format!("{}...", &cmd_str[..30])
+            } else {
+                cmd_str.clone()
+            };
 
             if let Ok(mut infos) = state.terminal_infos.lock() {
-                infos.push(TerminalInfo { id: id.clone(), label });
+                infos.push(TerminalInfo {
+                    id: id.clone(),
+                    label,
+                    cwd: resolved_cwd.clone(),
+                    command: cmd_str,
+                    title: String::new(),
+                    workspace: String::new(),
+                });
             }
 
             let buffer = {
@@ -308,7 +321,16 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
         }
 
         DaemonRequest::ListTerminals { seq } => {
-            let terminals = state.terminal_infos.lock().unwrap().clone();
+            let mut terminals = state.terminal_infos.lock().unwrap().clone();
+            let ws_data = state.workspace_data.lock().unwrap();
+            for t in &mut terminals {
+                for ws in ws_data.iter() {
+                    if ws.terminal_ids.contains(&t.id) {
+                        t.workspace = ws.name.clone();
+                        break;
+                    }
+                }
+            }
             Some(DaemonResponse::TerminalList { seq, terminals })
         }
 
@@ -327,7 +349,8 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
         DaemonRequest::WsServerStatus { seq } => {
             Some(DaemonResponse::WsStatus { seq, running: false, ip: "127.0.0.1".into() })
         }
-        DaemonRequest::SyncWorkspaces { seq, .. } => {
+        DaemonRequest::SyncWorkspaces { seq, workspaces, .. } => {
+            *state.workspace_data.lock().unwrap() = workspaces;
             Some(DaemonResponse::Ok { seq })
         }
     }
