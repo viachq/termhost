@@ -3728,17 +3728,38 @@ name = "terminal-hub"
 version = "0.1.0"
 dependencies = [
  "dirs",
- "futures-util",
- "portable-pty",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-shell",
  "tauri-utils",
+ "terminalhub-shared",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "terminalhub-daemon"
+version = "0.1.0"
+dependencies = [
+ "dirs",
+ "futures-util",
+ "portable-pty",
+ "serde",
+ "serde_json",
+ "terminalhub-shared",
+ "tokio",
  "warp",
+ "winapi",
+]
+
+[[package]]
+name = "terminalhub-shared"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -3855,9 +3876,23 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
+ "parking_lot",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2 0.6.4",
+ "tokio-macros",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "385a6cb71ab9ab790c5fe8d67f1645e6c450a7ce006a33de03daa956cf70a496"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]

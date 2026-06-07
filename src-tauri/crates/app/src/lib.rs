@@ -1,0 +1,342 @@
+mod daemon_client;
+
+use daemon_client::DaemonClient;
+use terminalhub_shared::protocol::*;
+use serde::{Deserialize, Serialize};
+use std::os::windows::process::CommandExt;
+use std::sync::Arc;
+use tauri::{Emitter, Manager, State};
+
+struct AppState {
+    daemon: Arc<DaemonClient>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct SpawnRequest {
+    id: String,
+    cwd: Option<String>,
+    command: Option<String>,
+    cols: Option<u16>,
+    rows: Option<u16>,
+}
+
+#[tauri::command]
+async fn spawn_terminal(state: State<'_, AppState>, req: SpawnRequest) -> Result<String, String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::Spawn {
+        seq,
+        id: req.id.clone(),
+        cwd: req.cwd.unwrap_or_default(),
+        command: req.command,
+        cols: req.cols.unwrap_or(80),
+        rows: req.rows.unwrap_or(24),
+    }).await?;
+
+    match resp {
+        DaemonResponse::SpawnResult { id, .. } => Ok(id),
+        DaemonResponse::Error { message, .. } => Err(message),
+        _ => Err("Unexpected response".into()),
+    }
+}
+
+#[tauri::command]
+async fn write_terminal(state: State<'_, AppState>, id: String, data: String) -> Result<(), String> {
+    state.daemon.fire_and_forget(&DaemonRequest::Write { id, data }).await
+}
+
+#[tauri::command]
+async fn resize_terminal(state: State<'_, AppState>, id: String, cols: u16, rows: u16) -> Result<(), String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::Resize { seq, id, cols, rows }).await?;
+    match resp {
+        DaemonResponse::Ok { .. } => Ok(()),
+        DaemonResponse::Error { message, .. } => Err(message),
+        _ => Err("Unexpected response".into()),
+    }
+}
+
+#[tauri::command]
+async fn kill_terminal(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::Kill { seq, id }).await?;
+    match resp {
+        DaemonResponse::Ok { .. } => Ok(()),
+        DaemonResponse::Error { message, .. } => Err(message),
+        _ => Err("Unexpected response".into()),
+    }
+}
+
+#[tauri::command]
+async fn has_terminal(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::HasTerminal { seq, id }).await?;
+    match resp {
+        DaemonResponse::HasResult { exists, .. } => Ok(exists),
+        _ => Ok(false),
+    }
+}
+
+#[tauri::command]
+async fn get_terminal_buffer(state: State<'_, AppState>, id: String) -> Result<String, String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::GetBuffer { seq, id }).await?;
+    match resp {
+        DaemonResponse::BufferData { data, .. } => Ok(data),
+        DaemonResponse::Error { message, .. } => Err(message),
+        _ => Err("Unexpected response".into()),
+    }
+}
+
+#[tauri::command]
+async fn start_ws_server(state: State<'_, AppState>, port: u16) -> Result<String, String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::StartWsServer { seq, port }).await?;
+    match resp {
+        DaemonResponse::WsStatus { ip, .. } => Ok(ip),
+        DaemonResponse::Error { message, .. } => Err(message),
+        _ => Err("Unexpected response".into()),
+    }
+}
+
+#[tauri::command]
+async fn stop_ws_server(state: State<'_, AppState>) -> Result<(), String> {
+    let seq = state.daemon.next_seq();
+    let _ = state.daemon.request(&DaemonRequest::StopWsServer { seq }).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn ws_server_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::WsServerStatus { seq }).await?;
+    match resp {
+        DaemonResponse::WsStatus { running, ip, .. } => {
+            Ok(serde_json::json!({ "running": running, "ip": ip }))
+        }
+        _ => Ok(serde_json::json!({ "running": false, "ip": "127.0.0.1" })),
+    }
+}
+
+#[tauri::command]
+async fn sync_workspaces(
+    state: State<'_, AppState>,
+    workspaces: Vec<WorkspaceData>,
+    active_idx: usize,
+) -> Result<(), String> {
+    let seq = state.daemon.next_seq();
+    let _ = state.daemon.request(&DaemonRequest::SyncWorkspaces { seq, workspaces, active_idx }).await;
+    Ok(())
+}
+
+#[derive(Serialize)]
+struct FileEntry {
+    name: String,
+    path: String,
+    is_dir: bool,
+}
+
+#[tauri::command]
+fn list_dir(path: String) -> Result<Vec<FileEntry>, String> {
+    let entries = std::fs::read_dir(&path).map_err(|e| e.to_string())?;
+    let mut result: Vec<FileEntry> = entries
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            let path = e.path().to_string_lossy().to_string();
+            let is_dir = e.file_type().ok()?.is_dir();
+            Some(FileEntry { name, path, is_dir })
+        })
+        .collect();
+    result.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.cmp(&b.name)));
+    Ok(result)
+}
+
+#[tauri::command]
+fn read_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn open_folder(path: String) -> Result<(), String> {
+    std::process::Command::new("explorer")
+        .arg(&path)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_cwd() -> String {
+    std::env::current_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| get_home_dir())
+}
+
+#[tauri::command]
+fn get_home_dir() -> String {
+    dirs::home_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| "C:\\".to_string())
+}
+
+#[tauri::command]
+async fn browser_open(app: tauri::AppHandle, url: String, x: f64, y: f64, width: f64, height: f64) -> Result<(), String> {
+    use tauri::{LogicalPosition, LogicalSize};
+    let parsed_url: url::Url = url.parse().map_err(|e: url::ParseError| e.to_string())?;
+    if let Some(existing) = app.get_webview("browser-panel") {
+        existing.navigate(parsed_url).map_err(|e: tauri::Error| e.to_string())?;
+        existing.set_position(LogicalPosition::new(x, y)).map_err(|e: tauri::Error| e.to_string())?;
+        existing.set_size(LogicalSize::new(width, height)).map_err(|e: tauri::Error| e.to_string())?;
+        return Ok(());
+    }
+    let window = app.get_webview_window("main").ok_or("No main window")?;
+    let raw_window = window.as_ref().window();
+    let webview = tauri::WebviewBuilder::new("browser-panel", tauri_utils::config::WebviewUrl::External(parsed_url));
+    raw_window.add_child(webview, LogicalPosition::new(x, y), LogicalSize::new(width, height))
+        .map_err(|e: tauri::Error| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn browser_navigate(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    let webview = app.get_webview("browser-panel").ok_or("Browser not open")?;
+    webview.navigate(url.parse().map_err(|e: url::ParseError| e.to_string())?).map_err(|e: tauri::Error| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn browser_resize(app: tauri::AppHandle, x: f64, y: f64, width: f64, height: f64) -> Result<(), String> {
+    use tauri::{LogicalPosition, LogicalSize};
+    let webview = app.get_webview("browser-panel").ok_or("Browser not open")?;
+    webview.set_position(LogicalPosition::new(x, y)).map_err(|e: tauri::Error| e.to_string())?;
+    webview.set_size(LogicalSize::new(width, height)).map_err(|e: tauri::Error| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn browser_close(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(webview) = app.get_webview("browser-panel") {
+        webview.close().map_err(|e: tauri::Error| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn browser_hide(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(webview) = app.get_webview("browser-panel") {
+        use tauri::LogicalPosition;
+        webview.set_position(LogicalPosition::new(-9999.0_f64, -9999.0_f64))
+            .map_err(|e: tauri::Error| e.to_string())?;
+    }
+    Ok(())
+}
+
+async fn connect_to_daemon() -> Result<(Arc<DaemonClient>, tokio::sync::mpsc::UnboundedReceiver<DaemonResponse>), String> {
+    // Try connecting to existing daemon
+    for _ in 0..3 {
+        if let Ok(result) = DaemonClient::connect().await {
+            return Ok(result);
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+
+    // Launch daemon process
+    let daemon_exe = std::env::current_exe()
+        .map_err(|e| e.to_string())?
+        .parent()
+        .ok_or("No parent dir")?
+        .join("terminalhub-daemon.exe");
+
+    if daemon_exe.exists() {
+        std::process::Command::new(&daemon_exe)
+            .creation_flags(0x00000008) // DETACHED_PROCESS
+            .spawn()
+            .map_err(|e| format!("Failed to launch daemon: {}", e))?;
+    } else {
+        // Dev mode: try cargo run
+        std::process::Command::new("cargo")
+            .args(["run", "-p", "terminalhub-daemon"])
+            .current_dir(std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().parent().unwrap())
+            .creation_flags(0x00000008)
+            .spawn()
+            .map_err(|e| format!("Failed to launch daemon via cargo: {}", e))?;
+    }
+
+    // Wait for daemon to start
+    for i in 0..15 {
+        tokio::time::sleep(std::time::Duration::from_millis(if i < 3 { 200 } else { 500 })).await;
+        if let Ok(result) = DaemonClient::connect().await {
+            return Ok(result);
+        }
+    }
+
+    Err("Failed to connect to daemon after launch".into())
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    std::env::set_var(
+        "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+        "--enable-gpu-rasterization --enable-zero-copy --disable-pinch --disable-features=BackForwardCache,TranslateUI --enable-features=CanvasOopRasterization",
+    );
+
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+
+    let (daemon, mut push_rx) = rt.block_on(async {
+        connect_to_daemon().await.expect("Failed to connect to PTY daemon")
+    });
+
+    // Send SubscribeAll
+    let daemon_sub = daemon.clone();
+    rt.spawn(async move {
+        let _ = daemon_sub.fire_and_forget(&DaemonRequest::SubscribeAll).await;
+    });
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .manage(AppState { daemon: daemon.clone() })
+        .setup(move |app| {
+            let handle = app.handle().clone();
+
+            // Spawn push receiver that emits Tauri events
+            tauri::async_runtime::spawn(async move {
+                while let Some(resp) = push_rx.recv().await {
+                    match resp {
+                        DaemonResponse::Output { id, data } => {
+                            let _ = handle.emit(&format!("pty-data-{}", id), &data);
+                        }
+                        DaemonResponse::TerminalExited { id, .. } => {
+                            let _ = handle.emit(&format!("pty-exit-{}", id), ());
+                        }
+                        _ => {}
+                    }
+                }
+            });
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            spawn_terminal,
+            write_terminal,
+            resize_terminal,
+            kill_terminal,
+            has_terminal,
+            get_terminal_buffer,
+            list_dir,
+            read_file,
+            get_home_dir,
+            get_cwd,
+            open_folder,
+            start_ws_server,
+            stop_ws_server,
+            ws_server_status,
+            sync_workspaces,
+            browser_open,
+            browser_navigate,
+            browser_resize,
+            browser_close,
+            browser_hide,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
