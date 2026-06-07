@@ -90,6 +90,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const savedIdx = parseInt(localStorage.getItem("terminalhub-active-ws") || "0");
     const activeWorkspaceIdx = savedIdx >= 0 && savedIdx < workspaces.length ? savedIdx : 0;
     set({ workspaces, activeWorkspaceIdx });
+
+    const wsData = workspaces.map((ws, i) => ({
+      name: ws.name,
+      color: ws.color,
+      terminal_ids: getTerminalIdsForWorkspace(i),
+    }));
+    syncWorkspaces(wsData, activeWorkspaceIdx).catch(() => {});
   },
 
   saveWorkspaces: () => {

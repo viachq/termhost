@@ -11,21 +11,16 @@ interface TerminalEntry {
   workspace: string;
 }
 
-function shortPath(p: string) {
-  if (!p) return "";
-  const parts = p.replace(/\\/g, "/").split("/");
-  return parts.length > 2 ? `.../${parts.slice(-2).join("/")}` : p;
-}
-
 function terminalDisplayName(t: TerminalEntry): { name: string; detail: string } {
+  const detail = t.cwd ? t.cwd.replace(/\\/g, "/") : "";
   if (t.command) {
     const cmd = t.command.split(/\s+/)[0];
     const base = cmd.includes("/") || cmd.includes("\\")
       ? cmd.split(/[/\\]/).pop()!
       : cmd;
-    return { name: base, detail: shortPath(t.cwd) };
+    return { name: base, detail };
   }
-  return { name: "PowerShell", detail: shortPath(t.cwd) };
+  return { name: "PowerShell", detail };
 }
 
 type DaemonMode = "daemon" | "direct" | "unknown";
