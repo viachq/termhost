@@ -1,6 +1,7 @@
 import { useWorkspaceStore } from "../../store/workspaceStore";
 import { usePanelStore } from "../../store/panelStore";
 import { WS_COLORS } from "../../constants/themes";
+import DaemonIndicator from "./DaemonIndicator";
 import s from "./Titlebar.module.css";
 
 interface Props {
@@ -50,6 +51,7 @@ export default function Titlebar({ onSwitchWorkspace, onEditWorkspace, onNewWork
       </div>
       <div className={s.drag} data-tauri-drag-region />
       <div className={s.right}>
+        <DaemonIndicator />
         <button
           className={`${s.btn} ${explorerOpen ? s.btnActive : ""}`}
           title="Panel (Ctrl+B)"

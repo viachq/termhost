@@ -1,0 +1,97 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(2px);
+}
+
+.dialog {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  padding: 24px;
+  max-width: 420px;
+  width: 90%;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+
+.body {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btnSecondary {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 7px 16px;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.1s;
+}
+
+.btnSecondary:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.btnPrimary {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 7px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: all 0.1s;
+}
+
+.btnPrimary:hover {
+  filter: brightness(1.1);
+}
+
+.btnDanger {
+  background: rgba(233, 69, 96, 0.15);
+  border: 1px solid rgba(233, 69, 96, 0.3);
+  color: #e94560;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 7px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: all 0.1s;
+}
+
+.btnDanger:hover {
+  background: rgba(233, 69, 96, 0.25);
+}
+
+.hint {
+  margin-top: 14px;
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0.7;
+  text-align: center;
+}

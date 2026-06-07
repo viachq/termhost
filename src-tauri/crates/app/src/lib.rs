@@ -128,6 +128,44 @@ async fn sync_workspaces(
     Ok(())
 }
 
+#[tauri::command]
+async fn list_terminals(state: State<'_, AppState>) -> Result<Vec<TerminalInfo>, String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::ListTerminals { seq }).await?;
+    match resp {
+        DaemonResponse::TerminalList { terminals, .. } => Ok(terminals),
+        _ => Ok(vec![]),
+    }
+}
+
+#[tauri::command]
+async fn shutdown_daemon(state: State<'_, AppState>) -> Result<(), String> {
+    let _ = state.daemon.fire_and_forget(&DaemonRequest::Shutdown).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn daemon_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let seq = state.daemon.next_seq();
+    match state.daemon.request(&DaemonRequest::Ping { seq }).await {
+        Ok(DaemonResponse::Pong { .. }) => {
+            let seq2 = state.daemon.next_seq();
+            let terminal_count = match state.daemon.request(&DaemonRequest::ListTerminals { seq: seq2 }).await {
+                Ok(DaemonResponse::TerminalList { terminals, .. }) => terminals.len(),
+                _ => 0,
+            };
+            Ok(serde_json::json!({
+                "connected": true,
+                "terminalCount": terminal_count
+            }))
+        }
+        _ => Ok(serde_json::json!({
+            "connected": false,
+            "terminalCount": 0
+        })),
+    }
+}
+
 #[derive(Serialize)]
 struct FileEntry {
     name: String,
@@ -315,6 +353,23 @@ pub fn run() {
 
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let handle = window.app_handle();
+                let daemon = handle.state::<AppState>().daemon.clone();
+                let has_terminals = tauri::async_runtime::block_on(async {
+                    let seq = daemon.next_seq();
+                    match daemon.request(&DaemonRequest::ListTerminals { seq }).await {
+                        Ok(DaemonResponse::TerminalList { terminals, .. }) => !terminals.is_empty(),
+                        _ => false,
+                    }
+                });
+                if has_terminals {
+                    api.prevent_close();
+                    let _ = window.emit("daemon-close-prompt", ());
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             spawn_terminal,
             write_terminal,
@@ -322,6 +377,9 @@ pub fn run() {
             kill_terminal,
             has_terminal,
             get_terminal_buffer,
+            list_terminals,
+            shutdown_daemon,
+            daemon_status,
             list_dir,
             read_file,
             get_home_dir,

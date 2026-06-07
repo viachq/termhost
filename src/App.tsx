@@ -4,6 +4,7 @@ import SplitContainer from "./components/splitpane/SplitContainer";
 import SearchBar from "./components/search/SearchBar";
 import ExplorerPanel from "./components/panels/ExplorerPanel";
 import TranslateTooltip from "./components/translate/TranslateTooltip";
+import CloseDialog from "./components/titlebar/CloseDialog";
 import WorkspaceEditor from "./components/pages/WorkspaceEditor";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { usePinchZoom } from "./hooks/usePinchZoom";
@@ -317,6 +318,7 @@ export default function App() {
         {explorerOpen && <ExplorerPanel />}
       </div>
       <TranslateTooltip />
+      <CloseDialog />
     </div>
   );
 }

@@ -1,0 +1,150 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+import { daemonStatus, shutdownDaemon, listTerminals, killTerminal } from "../../hooks/useTauriIpc";
+import s from "./DaemonIndicator.module.css";
+
+interface TerminalEntry {
+  id: string;
+  label: string;
+}
+
+export default function DaemonIndicator() {
+  const [connected, setConnected] = useState(false);
+  const [terminalCount, setTerminalCount] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [terminals, setTerminals] = useState<TerminalEntry[]>([]);
+  const [confirming, setConfirming] = useState<"shutdown" | "killAll" | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<number>(0);
+
+  const pollStatus = useCallback(async () => {
+    try {
+      const st = await daemonStatus();
+      setConnected(st.connected);
+      setTerminalCount(st.terminalCount);
+    } catch {
+      setConnected(false);
+      setTerminalCount(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    pollStatus();
+    timerRef.current = window.setInterval(pollStatus, 5000);
+    return () => clearInterval(timerRef.current);
+  }, [pollStatus]);
+
+  useEffect(() => {
+    if (!menuOpen) {
+      setConfirming(null);
+      return;
+    }
+    listTerminals()
+      .then(setTerminals)
+      .catch(() => setTerminals([]));
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpen]);
+
+  const handleKillTerminal = async (id: string) => {
+    await killTerminal(id).catch(() => {});
+    setTerminals((prev) => prev.filter((t) => t.id !== id));
+    setTerminalCount((prev) => Math.max(0, prev - 1));
+  };
+
+  const handleKillAll = async () => {
+    if (confirming !== "killAll") {
+      setConfirming("killAll");
+      return;
+    }
+    for (const t of terminals) {
+      await killTerminal(t.id).catch(() => {});
+    }
+    setTerminals([]);
+    setTerminalCount(0);
+    setConfirming(null);
+  };
+
+  const handleShutdown = async () => {
+    if (confirming !== "shutdown") {
+      setConfirming("shutdown");
+      return;
+    }
+    await shutdownDaemon().catch(() => {});
+    setConnected(false);
+    setTerminalCount(0);
+    setTerminals([]);
+    setMenuOpen(false);
+    setConfirming(null);
+  };
+
+  return (
+    <div className={s.wrapper} ref={menuRef}>
+      <button
+        className={s.indicator}
+        onClick={() => setMenuOpen(!menuOpen)}
+        title={connected ? `Daemon: ${terminalCount} terminals` : "Daemon disconnected"}
+      >
+        <span className={`${s.dot} ${connected ? s.dotOn : s.dotOff}`} />
+        {terminalCount > 0 && <span className={s.count}>{terminalCount}</span>}
+      </button>
+
+      {menuOpen && (
+        <div className={s.menu}>
+          <div className={s.menuHeader}>
+            <span className={`${s.dot} ${connected ? s.dotOn : s.dotOff}`} />
+            <span>{connected ? "Daemon active" : "Disconnected"}</span>
+          </div>
+
+          {terminals.length > 0 && (
+            <div className={s.terminalList}>
+              <div className={s.sectionLabel}>Background terminals ({terminals.length})</div>
+              {terminals.map((t) => (
+                <div key={t.id} className={s.terminalItem}>
+                  <span className={s.terminalId}>{t.label || t.id.slice(0, 8)}</span>
+                  <button
+                    className={s.killBtn}
+                    onClick={() => handleKillTerminal(t.id)}
+                    title="Kill terminal"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M2.5 2.5l5 5M7.5 2.5l-5 5" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {terminals.length === 0 && connected && (
+            <div className={s.emptyMsg}>No background terminals</div>
+          )}
+
+          <div className={s.menuActions}>
+            {terminals.length > 0 && (
+              <button
+                className={`${s.actionBtn} ${confirming === "killAll" ? s.actionDanger : ""}`}
+                onClick={handleKillAll}
+              >
+                {confirming === "killAll" ? "Confirm kill all?" : "Kill all terminals"}
+              </button>
+            )}
+            {connected && (
+              <button
+                className={`${s.actionBtn} ${confirming === "shutdown" ? s.actionDanger : ""}`}
+                onClick={handleShutdown}
+              >
+                {confirming === "shutdown" ? "Confirm shutdown?" : "Shutdown daemon"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

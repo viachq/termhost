@@ -89,6 +89,18 @@ export async function wsServerStatus(): Promise<{ running: boolean; ip: string }
   return invoke("ws_server_status");
 }
 
+export async function listTerminals(): Promise<{ id: string; label: string }[]> {
+  return invoke("list_terminals");
+}
+
+export async function shutdownDaemon(): Promise<void> {
+  return invoke("shutdown_daemon");
+}
+
+export async function daemonStatus(): Promise<{ connected: boolean; terminalCount: number }> {
+  return invoke("daemon_status");
+}
+
 export async function syncWorkspaces(
   workspaces: { name: string; color: number; terminal_ids: string[] }[],
   activeIdx: number
