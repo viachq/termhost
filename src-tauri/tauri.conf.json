@@ -9,9 +9,7 @@
     "beforeDevCommand": "npm run vite:dev",
     "beforeBuildCommand": "npm run vite:build"
   },
-  "bundle": {
-    "externalBin": ["binaries/terminalhub-daemon"]
-  },
+  "bundle": {},
   "app": {
     "windows": [
       {
