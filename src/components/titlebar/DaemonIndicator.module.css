@@ -41,6 +41,11 @@
   box-shadow: 0 0 4px rgba(233, 69, 96, 0.4);
 }
 
+.dotDirect {
+  background: #f39c12;
+  box-shadow: 0 0 4px rgba(243, 156, 18, 0.4);
+}
+
 .count {
   font-variant-numeric: tabular-nums;
   color: var(--text-dim);

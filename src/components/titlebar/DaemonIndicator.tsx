@@ -28,7 +28,10 @@ function terminalDisplayName(t: TerminalEntry): { name: string; detail: string }
   return { name: "PowerShell", detail: shortPath(t.cwd) };
 }
 
+type DaemonMode = "daemon" | "direct" | "unknown";
+
 export default function DaemonIndicator() {
+  const [mode, setMode] = useState<DaemonMode>("unknown");
   const [connected, setConnected] = useState(false);
   const [terminalCount, setTerminalCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -40,9 +43,11 @@ export default function DaemonIndicator() {
   const pollStatus = useCallback(async () => {
     try {
       const st = await daemonStatus();
+      setMode("daemon");
       setConnected(st.connected);
       setTerminalCount(st.terminalCount);
     } catch {
+      setMode("direct");
       setConnected(false);
       setTerminalCount(0);
     }
@@ -117,17 +122,29 @@ export default function DaemonIndicator() {
       <button
         className={s.indicator}
         onClick={() => setMenuOpen(!menuOpen)}
-        title={connected ? `Daemon: ${terminalCount} terminals` : "Daemon disconnected"}
+        title={
+          mode === "direct" ? "Direct mode" :
+          connected ? `Daemon: ${terminalCount} terminals` : "Daemon disconnected"
+        }
       >
-        <span className={`${s.dot} ${connected ? s.dotOn : s.dotOff}`} />
+        <span className={`${s.dot} ${
+          mode === "direct" ? s.dotDirect :
+          connected ? s.dotOn : s.dotOff
+        }`} />
         {terminalCount > 0 && <span className={s.count}>{terminalCount}</span>}
       </button>
 
       {menuOpen && (
         <div className={s.menu}>
           <div className={s.menuHeader}>
-            <span className={`${s.dot} ${connected ? s.dotOn : s.dotOff}`} />
-            <span>{connected ? "Daemon active" : "Disconnected"}</span>
+            <span className={`${s.dot} ${
+              mode === "direct" ? s.dotDirect :
+              connected ? s.dotOn : s.dotOff
+            }`} />
+            <span>{
+              mode === "direct" ? "Direct mode" :
+              connected ? "Daemon active" : "Daemon disconnected"
+            }</span>
           </div>
 
           {terminals.length > 0 && (
