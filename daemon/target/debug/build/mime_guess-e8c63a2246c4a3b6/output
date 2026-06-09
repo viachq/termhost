@@ -1,1 +1,0 @@
-cargo:rustc-env=MIME_TYPES_GENERATED_PATH=C:\Users\viach\Desktop\TerminalHub\daemon\target\debug\build\mime_guess-e8c63a2246c4a3b6\out\mime_types_generated.rs

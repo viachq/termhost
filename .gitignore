@@ -7,6 +7,8 @@ dist-mobile/
 
 # Rust build
 src-tauri/target/
+daemon/target/
+shared/target/
 
 # .NET build artifacts
 obj/
