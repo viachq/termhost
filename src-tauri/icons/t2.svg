@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="r"><rect width="1024" height="1024" rx="220"/></clipPath>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f2027"/>
+      <stop offset="50%" stop-color="#203a43"/>
+      <stop offset="100%" stop-color="#2c5364"/>
+    </linearGradient>
+    <filter id="sh">
+      <feDropShadow dx="0" dy="12" stdDeviation="36" flood-color="#000" flood-opacity="0.55"/>
+    </filter>
+    <filter id="gl">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="ac" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff6b8a"/>
+      <stop offset="100%" stop-color="#e94560"/>
+    </linearGradient>
+    <linearGradient id="tb" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#141420"/>
+      <stop offset="100%" stop-color="#0c0c16"/>
+    </linearGradient>
+  </defs>
+  <g clip-path="url(#r)">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+
+    <rect x="152" y="152" width="720" height="720" rx="36" fill="url(#tb)" filter="url(#sh)"/>
+    <rect x="152" y="152" width="720" height="720" rx="36" fill="none" stroke="#fff" stroke-width="1" opacity="0.07"/>
+
+    <!-- Title bar -->
+    <rect x="152" y="152" width="720" height="58" rx="36" fill="#1a1a2a"/>
+    <rect x="152" y="188" width="720" height="22" fill="#1a1a2a"/>
+    <circle cx="210" cy="184" r="13" fill="#ff5f57"/>
+    <circle cx="250" cy="184" r="13" fill="#febc2e"/>
+    <circle cx="290" cy="184" r="13" fill="#28c840"/>
+
+    <!-- npm run dev style output -->
+    <!-- Prompt + command -->
+    <text x="200" y="290" font-family="monospace" font-size="52" fill="url(#ac)" font-weight="700" filter="url(#gl)">❯</text>
+    <rect x="264" y="258" width="120" height="36" rx="7" fill="#7dd3fc" opacity="0.12"/>
+    <rect x="398" y="258" width="80" height="36" rx="7" fill="#28c840" opacity="0.12"/>
+    <rect x="492" y="258" width="60" height="36" rx="7" fill="#fff" opacity="0.05"/>
+
+    <!-- Build output -->
+    <rect x="200" y="318" width="60" height="24" rx="5" fill="#7dd3fc" opacity="0.2"/>
+    <rect x="274" y="318" width="300" height="24" rx="5" fill="#fff" opacity="0.06"/>
+
+    <rect x="200" y="356" width="44" height="24" rx="5" fill="#28c840" opacity="0.25"/>
+    <rect x="258" y="356" width="380" height="24" rx="5" fill="#fff" opacity="0.06"/>
+
+    <!-- URL line — highlighted -->
+    <rect x="220" y="408" width="60" height="28" rx="6" fill="#28c840" opacity="0.2"/>
+    <rect x="294" y="408" width="300" height="28" rx="6" fill="#7dd3fc" opacity="0.18"/>
+
+    <!-- Port info -->
+    <rect x="220" y="450" width="80" height="24" rx="5" fill="#fff" opacity="0.05"/>
+    <rect x="314" y="450" width="200" height="24" rx="5" fill="#febc2e" opacity="0.12"/>
+
+    <!-- Network -->
+    <rect x="220" y="488" width="80" height="24" rx="5" fill="#fff" opacity="0.05"/>
+    <rect x="314" y="488" width="260" height="24" rx="5" fill="#7dd3fc" opacity="0.1"/>
+
+    <!-- Ready in -->
+    <rect x="200" y="540" width="80" height="28" rx="6" fill="#28c840" opacity="0.2"/>
+    <rect x="294" y="540" width="180" height="28" rx="6" fill="#fff" opacity="0.06"/>
+    <rect x="488" y="540" width="60" height="28" rx="6" fill="#febc2e" opacity="0.15"/>
+
+    <!-- HMR line -->
+    <rect x="200" y="592" width="340" height="24" rx="5" fill="#fff" opacity="0.04"/>
+
+    <!-- Next prompt -->
+    <text x="200" y="690" font-family="monospace" font-size="52" fill="url(#ac)" font-weight="700" filter="url(#gl)" opacity="0.45">❯</text>
+    <rect x="264" y="660" width="24" height="34" rx="5" fill="#e94560" opacity="0.65"/>
+
+    <text x="200" y="790" font-family="monospace" font-size="44" fill="url(#ac)" font-weight="700" opacity="0.12">❯</text>
+  </g>
+</svg>

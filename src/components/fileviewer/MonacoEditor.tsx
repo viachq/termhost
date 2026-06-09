@@ -47,7 +47,7 @@ export default function MonacoEditor({ content, filename }: Props) {
       editorRef.current = monaco.editor.create(containerRef.current, {
         value: content,
         language,
-        theme: uiTheme === "light" ? "vs" : "vs-dark",
+        theme: uiTheme !== "dark" ? "vs" : "vs-dark",
         fontSize: 14,
         fontFamily: termFontFamily,
         minimap: { enabled: false },
@@ -67,7 +67,7 @@ export default function MonacoEditor({ content, filename }: Props) {
     const unsub = useSettingsStore.subscribe((state) => {
       if (!editorRef.current) return;
       import("monaco-editor").then((monaco) => {
-        monaco.editor.setTheme(state.uiTheme === "light" ? "vs" : "vs-dark");
+        monaco.editor.setTheme(state.uiTheme !== "dark" ? "vs" : "vs-dark");
         editorRef.current?.updateOptions({ fontFamily: state.termFontFamily });
       });
     });

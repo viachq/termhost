@@ -148,8 +148,8 @@ export default function TranslatePanel({ embedded }: { embedded?: boolean } = {}
         timerRef.current = setTimeout(() => doTranslate(text, srcLang, tgtLang), 300);
       }
     };
-    window.addEventListener("terminalhub:terminal-copy", handler);
-    return () => window.removeEventListener("terminalhub:terminal-copy", handler);
+    window.addEventListener("agentworkspace:terminal-copy", handler);
+    return () => window.removeEventListener("agentworkspace:terminal-copy", handler);
   }, [autoCopy, translateOpen, srcLang, tgtLang, doTranslate]);
 
   const handleSrcChange = useCallback(

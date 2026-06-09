@@ -1,11 +1,17 @@
+import { useState, useRef, useEffect } from "react";
 import { useTerminalStore, terminalRefs } from "../../store/terminalStore";
 import s from "./Terminal.module.css";
 
 interface Props {
   id: string;
   cwd?: string;
+  isZoomed: boolean;
+  isSinglePane: boolean;
+  leafCount: number;
   onSplitH: () => void;
   onSplitV: () => void;
+  onRotate: (id: string) => void;
+  onZoom: () => void;
   onClose: () => void;
 }
 
@@ -31,31 +37,120 @@ function getDir(title: string, fallbackCwd?: string) {
   return "~";
 }
 
-export default function PaneHeader({ id, cwd, onSplitH, onSplitV, onClose }: Props) {
+function btn(handler: () => void) {
+  return {
+    onClick: (e: React.MouseEvent) => { e.stopPropagation(); e.preventDefault(); handler(); },
+    onMouseDown: (e: React.MouseEvent) => { e.stopPropagation(); },
+  };
+}
+
+function Dropdown({ items, onClose }: { items: { label: string; icon: React.ReactNode; action: () => void }[]; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+  return (
+    <div ref={ref} className={s.dropdown}>
+      {items.map((item, i) => (
+        <button key={i} className={s.dropdownItem} onClick={(e) => { e.stopPropagation(); item.action(); onClose(); }} onMouseDown={(e) => e.stopPropagation()}>
+          {item.icon}
+          <span>{item.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const ICON_TWO_COLS = (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+    <rect x="1" y="1" width="6" height="14" rx="1.5" />
+    <rect x="9" y="1" width="6" height="14" rx="1.5" />
+  </svg>
+);
+const ICON_TWO_ROWS = (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+    <rect x="1" y="1" width="14" height="6" rx="1.5" />
+    <rect x="1" y="9" width="14" height="6" rx="1.5" />
+  </svg>
+);
+
+export default function PaneHeader({ id, cwd, isZoomed, isSinglePane, leafCount, onSplitH, onSplitV, onZoom, onClose }: Props) {
   const title = useTerminalStore((st) => st.titles[id] || "");
+  const rearrangeMode = useTerminalStore((st) => st.rearrangeMode);
+  const toggleRearrange = useTerminalStore((st) => st.toggleRearrangeMode);
   const lastDir = terminalRefs.get(id)?.lastDir;
   const fullPath = title || lastDir || cwd || "";
   const dir = getDir(title, lastDir || cwd);
+  const [showAdd, setShowAdd] = useState(false);
 
   return (
-    <div className={s.header} onMouseDown={(e) => e.stopPropagation()}>
+    <div className={s.header} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
       <span className={s.paneLabel} title={fullPath}>{dir}</span>
       <div className={s.actions}>
-        <button className={s.action} title="Split Horizontal" onClick={onSplitH}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <rect x="1" y="1" width="6" height="14" rx="1.5" />
-            <rect x="9" y="1" width="6" height="14" rx="1.5" />
-          </svg>
-        </button>
-        <button className={s.action} title="Split Vertical" onClick={onSplitV}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <rect x="1" y="1" width="14" height="6" rx="1.5" />
-            <rect x="1" y="9" width="14" height="6" rx="1.5" />
-          </svg>
-        </button>
-        <button className={`${s.action} ${s.actionClose}`} title="Close" onClick={onClose}>
-          <svg width="14" height="14" viewBox="0 0 12 12" fill="currentColor">
-            <path d="M3.17 2.23a.67.67 0 00-.94.94L5.06 6 2.23 8.83a.67.67 0 00.94.94L6 6.94l2.83 2.83a.67.67 0 00.94-.94L6.94 6l2.83-2.83a.67.67 0 00-.94-.94L6 5.06 3.17 2.23z" />
+        {/* Add terminal */}
+        {!isZoomed && (
+          <div style={{ position: "relative" }}>
+            <button className={s.action} title="Add terminal" onClick={(e) => { e.stopPropagation(); setShowAdd(!showAdd); }} onMouseDown={(e) => e.stopPropagation()}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <path d="M8 3v10M3 8h10" />
+              </svg>
+            </button>
+            {showAdd && (
+              <Dropdown
+                onClose={() => setShowAdd(false)}
+                items={[
+                  { label: "Split right", icon: ICON_TWO_COLS, action: onSplitH },
+                  { label: "Split down", icon: ICON_TWO_ROWS, action: onSplitV },
+                ]}
+              />
+            )}
+          </div>
+        )}
+
+        {/* Rearrange mode toggle */}
+        {!isSinglePane && !isZoomed && (
+          <button
+            className={`${s.action} ${rearrangeMode ? s.actionActive : ""}`}
+            title="Rearrange (Ctrl+Shift+R)"
+            {...btn(toggleRearrange)}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="1" y="1" width="14" height="14" rx="1.5" />
+              <line x1="8" y1="1" x2="8" y2="15" />
+              <line x1="1" y1="8" x2="8" y2="8" />
+            </svg>
+          </button>
+        )}
+
+        {/* Expand / Collapse */}
+        {!isSinglePane && (
+          <button className={s.action} title={isZoomed ? "Collapse (Ctrl+Shift+M)" : "Expand (Ctrl+Shift+M)"} {...btn(onZoom)}>
+            {isZoomed ? (
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 6 10 6 10 1" />
+                <line x1="15" y1="1" x2="9" y2="7" />
+                <polyline points="1 10 6 10 6 15" />
+                <line x1="1" y1="15" x2="7" y2="9" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="10 1 15 1 15 6" />
+                <line x1="15" y1="1" x2="9" y2="7" />
+                <polyline points="6 15 1 15 1 10" />
+                <line x1="1" y1="15" x2="7" y2="9" />
+              </svg>
+            )}
+          </button>
+        )}
+
+        {/* Close */}
+        <button className={`${s.action} ${s.actionClose}`} title="Close (Ctrl+W)" {...btn(onClose)}>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <path d="M3 3l6 6M9 3l-6 6" />
           </svg>
         </button>
       </div>

@@ -236,6 +236,32 @@
 [data-ui-theme="light"] .md-body .callout-warning { background: rgba(255, 145, 0, 0.06); }
 [data-ui-theme="light"] .md-body .callout-caution { background: rgba(255, 23, 68, 0.06); }
 
+/* daylight theme — reuse light overrides with warmer code blocks */
+[data-ui-theme="daylight"] .md-body tr:nth-child(even) { background: rgba(0,0,0,0.03); }
+[data-ui-theme="daylight"] .md-body pre,
+[data-ui-theme="daylight"] .md-body .md-code-block { background: #e6dfd3; }
+[data-ui-theme="daylight"] .md-body code { background: #ddd5c8; }
+[data-ui-theme="daylight"] .md-body blockquote { background: rgba(212, 90, 104, 0.06); }
+[data-ui-theme="daylight"] .md-body .hljs-keyword,
+[data-ui-theme="daylight"] .md-body .hljs-selector-tag { color: #af00db; }
+[data-ui-theme="daylight"] .md-body .hljs-string,
+[data-ui-theme="daylight"] .md-body .hljs-addition { color: #a31515; }
+[data-ui-theme="daylight"] .md-body .hljs-number,
+[data-ui-theme="daylight"] .md-body .hljs-literal { color: #098658; }
+[data-ui-theme="daylight"] .md-body .hljs-comment,
+[data-ui-theme="daylight"] .md-body .hljs-deletion { color: #008000; }
+[data-ui-theme="daylight"] .md-body .hljs-type,
+[data-ui-theme="daylight"] .md-body .hljs-built_in,
+[data-ui-theme="daylight"] .md-body .hljs-title { color: #267f99; }
+[data-ui-theme="daylight"] .md-body .hljs-attr,
+[data-ui-theme="daylight"] .md-body .hljs-variable { color: #001080; }
+[data-ui-theme="daylight"] .md-body .hljs-function { color: #795e26; }
+[data-ui-theme="daylight"] .md-body .callout-note { background: rgba(68, 138, 255, 0.06); }
+[data-ui-theme="daylight"] .md-body .callout-tip { background: rgba(0, 200, 83, 0.06); }
+[data-ui-theme="daylight"] .md-body .callout-important { background: rgba(170, 0, 255, 0.06); }
+[data-ui-theme="daylight"] .md-body .callout-warning { background: rgba(255, 145, 0, 0.06); }
+[data-ui-theme="daylight"] .md-body .callout-caution { background: rgba(255, 23, 68, 0.06); }
+
 .md-body img { max-width: 100%; border-radius: 6px; margin: 0.5em 0; }
 
 .md-body input[type="checkbox"] { accent-color: var(--accent); margin-right: 6px; }

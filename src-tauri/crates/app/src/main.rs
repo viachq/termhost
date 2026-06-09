@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    terminal_hub_lib::run()
+    agent_workspace_lib::run()
 }

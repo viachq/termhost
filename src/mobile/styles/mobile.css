@@ -232,6 +232,14 @@ html, body, #root {
   cursor: pointer;
 }
 
+.m-btn-clip {
+  padding: 10px 12px;
+  background: #1e1e1e;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-size: 16px;
+}
+
 /* Workspace Picker */
 .m-ws-overlay {
   position: fixed;
@@ -391,4 +399,167 @@ html, body, #root {
   border-color: var(--accent);
   color: #fff;
   font-weight: 600;
+}
+
+/* Bottom Navigation */
+.m-bottom-nav {
+  display: flex;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.m-nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 0 6px;
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.m-nav-btn.active {
+  color: var(--accent);
+}
+
+.m-nav-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* Clipboard Page */
+.m-clipboard {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.m-clip-compose {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.m-clip-textarea {
+  width: 100%;
+  min-height: 100px;
+  max-height: 200px;
+  padding: 12px;
+  background: #1e1e1e;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.m-clip-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.m-clip-textarea::placeholder {
+  color: var(--dim);
+}
+
+.m-clip-send {
+  padding: 12px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.m-clip-send:disabled {
+  opacity: 0.4;
+}
+
+.m-clip-history {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 12px 12px;
+}
+
+.m-clip-history-title {
+  font-size: 11px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 0;
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+}
+
+.m-clip-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+
+.m-clip-entry:active {
+  background: #1e1e1e;
+  border-color: var(--accent);
+}
+
+.m-clip-entry-text {
+  flex: 1;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.3;
+}
+
+.m-clip-entry-time {
+  font-size: 10px;
+  color: var(--dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+/* Toast */
+.m-toast {
+  position: fixed;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  background: #2ecc71;
+  color: #000;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  z-index: 200;
+  animation: m-toast-in 0.2s ease-out;
+  pointer-events: none;
+}
+
+@keyframes m-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }

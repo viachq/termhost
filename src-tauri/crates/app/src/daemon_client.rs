@@ -1,4 +1,4 @@
-use terminalhub_shared::protocol::*;
+use agent_workspace_shared::protocol::*;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -6,7 +6,7 @@ use tokio::net::windows::named_pipe::ClientOptions;
 use tokio::sync::{mpsc, oneshot, Mutex};
 use std::collections::HashMap;
 
-const PIPE_NAME: &str = r"\\.\pipe\terminalhub-pty-v1";
+const PIPE_NAME: &str = r"\\.\pipe\agent-workspace-pty-v1";
 
 pub struct DaemonClient {
     writer: Arc<Mutex<tokio::io::WriteHalf<tokio::net::windows::named_pipe::NamedPipeClient>>>,
@@ -122,7 +122,7 @@ fn response_seq(resp: &DaemonResponse) -> Option<u32> {
         DaemonResponse::TerminalList { seq, .. } => Some(*seq),
         DaemonResponse::WsStatus { seq, .. } => Some(*seq),
         DaemonResponse::Pong { seq } => Some(*seq),
-        DaemonResponse::Output { .. } | DaemonResponse::TerminalExited { .. } => None,
+        DaemonResponse::Output { .. } | DaemonResponse::TerminalExited { .. } | DaemonResponse::ShowWindow => None,
     }
 }
 

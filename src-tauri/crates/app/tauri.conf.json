@@ -1,8 +1,8 @@
 {
-  "productName": "TerminalHub",
-  "mainBinaryName": "terminal-hub",
+  "productName": "Agent Workspace",
+  "mainBinaryName": "agent-workspace",
   "version": "0.1.0",
-  "identifier": "com.terminalhub.app",
+  "identifier": "com.agentworkspace.app",
   "build": {
     "frontendDist": "../../../dist",
     "devUrl": "http://localhost:1420",

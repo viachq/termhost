@@ -11,7 +11,7 @@
 .filesPanelHeader {
   display: flex;
   align-items: center;
-  padding: 6px 10px;
+  padding: 8px 10px;
   gap: 6px;
   border-bottom: 1px solid var(--border);
 }
@@ -22,8 +22,8 @@
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text-main);
-  padding: 4px 8px;
-  font-size: 12px;
+  padding: 5px 8px;
+  font-size: 13px;
   outline: none;
   font-family: inherit;
 }
@@ -37,8 +37,8 @@
   border: none;
   color: var(--text-dim);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 3px;
+  padding: 5px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   flex-shrink: 0;
@@ -61,8 +61,8 @@
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--text-dim);
-  padding: 2px 8px;
-  font-size: 11px;
+  padding: 3px 10px;
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -80,9 +80,9 @@
 .breadcrumb {
   display: flex;
   align-items: center;
-  padding: 4px 10px;
+  padding: 5px 10px;
   gap: 2px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-dim);
   overflow-x: auto;
   white-space: nowrap;
@@ -125,19 +125,117 @@
   padding: 4px 0;
 }
 
-.fileItem {
+.bookmarks {
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.bookmarksCount {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-dim);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 6px;
+  line-height: 16px;
+}
+
+.bookmarkItem {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 12px;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 12px;
   cursor: pointer;
   font-size: 13px;
   color: var(--text-main);
   user-select: none;
 }
 
+.bookmarkPath {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  word-break: break-all;
+  line-height: 1.25;
+}
+
+.bookmarkItem:hover {
+  background: var(--bg-hover);
+}
+
+.bookmarkRemove {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+  border-radius: 3px;
+  line-height: 1;
+}
+
+.bookmarkItem:hover .bookmarkRemove {
+  display: flex;
+}
+
+.bookmarkRemove:hover {
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.treeChevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--text-dim);
+  transition: transform 0.12s;
+}
+
+.treeChevronOpen {
+  composes: treeChevron;
+  transform: rotate(90deg);
+}
+
+.treeChevronHidden {
+  composes: treeChevron;
+  visibility: hidden;
+}
+
+.fileItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-main);
+  user-select: none;
+  position: relative;
+}
+
 .fileItem:hover {
   background: var(--bg-hover);
+}
+
+.fileItemSelected {
+  background: rgba(233, 69, 96, 0.12);
+}
+
+.fileItemSelected:hover {
+  background: rgba(233, 69, 96, 0.18);
+}
+
+.fileItemHighlight {
+  background: rgba(233, 69, 96, 0.08);
+  outline: 1px solid rgba(233, 69, 96, 0.3);
+  outline-offset: -1px;
 }
 
 .fileItemDir {
@@ -159,14 +257,57 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
+}
+
+.fileIcon svg {
+  width: 100%;
+  height: 100%;
 }
 
 .fileName {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.fileMeta {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: none;
+  gap: 8px;
+}
+
+.fileItem:hover .fileMeta {
+  display: flex;
+}
+
+.fileCopy {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 1px 3px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.fileItem:hover .fileCopy {
+  display: flex;
+  align-items: center;
+}
+
+.fileCopy:hover {
+  color: var(--text-main);
+  background: var(--bg-hover);
 }
 
 /* Browser Panel */
@@ -507,6 +648,26 @@
   overflow: hidden;
 }
 
+.explorerSplitPane {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 100px;
+}
+
+.explorerSplitDivider {
+  width: 4px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: var(--border);
+  transition: background 0.1s;
+}
+
+.explorerSplitDivider:hover,
+.explorerSplitDivider:active {
+  background: var(--accent);
+}
+
 /* Settings Panel */
 
 .settingsPanel {
@@ -592,7 +753,7 @@
 
 .settingsThemes {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
 }
 
@@ -624,8 +785,8 @@
   text-align: center;
   padding: 3px;
   font-size: 10px;
-  color: var(--text-main);
-  background: var(--bg-hover);
+  color: var(--text);
+  background: var(--bg-surface);
 }
 
 .settingsBtn {
@@ -659,4 +820,364 @@
   font-family: monospace;
   font-size: 11px;
   word-break: break-all;
+}
+
+/* MCP Panel */
+
+.mcpToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.mcpToolbarTitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.mcpRefreshBtn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  padding: 5px 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all 0.15s;
+}
+
+.mcpRefreshBtn:hover {
+  color: var(--text-main);
+  border-color: var(--text-dim);
+  background: var(--bg-surface);
+}
+
+.mcpRefreshBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+@keyframes mcpSpinAnim {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.mcpSpin {
+  animation: mcpSpinAnim 1s linear infinite;
+}
+
+.mcpEmpty {
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 32px 0;
+  text-align: center;
+}
+
+.mcpProvider {
+  margin-bottom: 20px;
+}
+
+.mcpProviderHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+  padding: 10px 12px;
+  border-left: 3px solid;
+  margin-bottom: 10px;
+  background: var(--bg-surface);
+  border-radius: 0 6px 6px 0;
+}
+
+.mcpSection {
+  margin-bottom: 4px;
+}
+
+.mcpSectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 7px 6px;
+  cursor: pointer;
+  transition: all 0.1s;
+  border-radius: 4px;
+}
+
+.mcpSectionHeader:hover {
+  color: var(--text-main);
+  background: var(--bg-surface);
+}
+
+.mcpSectionIcon {
+  display: flex;
+  align-items: center;
+  opacity: 0.5;
+}
+
+.mcpCount {
+  font-size: 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0 7px;
+  line-height: 18px;
+  color: var(--text-dim);
+  margin-left: 2px;
+}
+
+.mcpSectionBody {
+  padding: 4px 0 6px 20px;
+}
+
+.mcpCard {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.mcpCard:hover {
+  border-color: var(--text-dim);
+}
+
+.mcpCardDim {
+  opacity: 0.45;
+}
+
+.mcpCardDim:hover {
+  opacity: 0.75;
+}
+
+.mcpCardRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mcpCardName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcpDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mcpDot[data-status="on"] {
+  background: #4ade80;
+  box-shadow: 0 0 6px #4ade8066;
+}
+
+.mcpDot[data-status="off"] {
+  background: #555;
+}
+
+.mcpVersion {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-family: monospace;
+}
+
+.mcpCardDetail {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--text-dim);
+  margin-top: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.mcpBadge {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--text-dim);
+  line-height: 14px;
+  flex-shrink: 0;
+}
+
+/* Toggle switch */
+
+.mcpToggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  border: none;
+  background: #3a3a3a;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.mcpToggle:hover {
+  background: #4a4a4a;
+}
+
+.mcpToggleOn {
+  background: #4ade80;
+}
+
+.mcpToggleOn:hover {
+  background: #22c55e;
+}
+
+.mcpToggleKnob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.mcpToggleOn .mcpToggleKnob {
+  transform: translateX(16px);
+}
+
+/* SSH Panel */
+
+.sshForm {
+  padding: 8px 0 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sshInput {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-main);
+  padding: 4px 8px;
+  font-size: 12px;
+  outline: none;
+  font-family: inherit;
+}
+
+.sshInput:focus {
+  border-color: var(--accent);
+}
+
+.sshBtnPrimary {
+  background: var(--accent);
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  padding: 5px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.sshBtnPrimary:hover {
+  opacity: 0.9;
+}
+
+.sshCard {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  transition: border-color 0.15s;
+}
+
+.sshCard:hover {
+  border-color: var(--text-dim);
+}
+
+.sshCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sshCardName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.sshCardActions {
+  display: flex;
+  gap: 4px;
+}
+
+.sshBtnConnect {
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 3px 6px;
+  display: flex;
+  align-items: center;
+}
+
+.sshBtnConnect:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.sshBtnSmall {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+}
+
+.sshBtnSmall:hover {
+  color: var(--text-main);
+  background: var(--bg-hover);
+}
+
+.sshCardDetail {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--text-dim);
+  margin-top: 4px;
 }

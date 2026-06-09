@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="r"><rect width="1024" height="1024" rx="220"/></clipPath>
+    <radialGradient id="bg" cx="50%" cy="45%" r="70%">
+      <stop offset="0%" stop-color="#100810"/>
+      <stop offset="100%" stop-color="#030304"/>
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="12" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="cursorGlow">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff6b8a"/>
+      <stop offset="100%" stop-color="#e94560"/>
+    </linearGradient>
+  </defs>
+  <g clip-path="url(#r)">
+    <!-- Background -->
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+
+    <!-- Subtle ambient glow behind terminal -->
+    <ellipse cx="512" cy="460" rx="340" ry="280" fill="#e94560" opacity="0.03"/>
+
+    <!-- Terminal window -->
+    <rect x="128" y="148" width="768" height="728" rx="28" fill="#0a0a0e"/>
+    <rect x="128" y="148" width="768" height="728" rx="28" fill="none" stroke="#1a1a22" stroke-width="2"/>
+
+    <!-- Title bar background -->
+    <path d="M128 148 h768 q0 0 0 0 v48 h-768 v-48 q0 0 0 0Z" fill="#0e0e13"/>
+    <rect x="128" y="148" width="768" height="48" rx="28" fill="#0e0e13"/>
+    <rect x="128" y="170" width="768" height="26" fill="#0e0e13"/>
+
+    <!-- Title bar bottom border -->
+    <line x1="128" y1="196" x2="896" y2="196" stroke="#1a1a22" stroke-width="1.5"/>
+
+    <!-- Mac dots -->
+    <circle cx="180" cy="172" r="8.5" fill="#ff5f57"/>
+    <circle cx="210" cy="172" r="8.5" fill="#febc2e"/>
+    <circle cx="240" cy="172" r="8.5" fill="#28c840"/>
+
+    <!-- Prompt 1 — hero -->
+    <text x="180" y="290" font-family="'SF Mono',ui-monospace,monospace" font-size="56" fill="url(#accent)" font-weight="700" filter="url(#glow)">❯</text>
+
+    <!-- Typed command -->
+    <rect x="248" y="258" width="300" height="36" rx="6" fill="#e94560" opacity="0.09"/>
+
+    <!-- Cursor -->
+    <rect x="560" y="256" width="20" height="40" rx="3" fill="#e94560" filter="url(#cursorGlow)"/>
+
+    <!-- Output lines -->
+    <rect x="180" y="322" width="360" height="16" rx="4" fill="#28c840" opacity="0.09"/>
+    <rect x="180" y="352" width="250" height="16" rx="4" fill="#d4d4d4" opacity="0.045"/>
+    <rect x="180" y="382" width="440" height="16" rx="4" fill="#d4d4d4" opacity="0.035"/>
+    <rect x="180" y="412" width="180" height="16" rx="4" fill="#febc2e" opacity="0.07"/>
+    <rect x="180" y="442" width="320" height="16" rx="4" fill="#d4d4d4" opacity="0.035"/>
+    <rect x="180" y="472" width="240" height="16" rx="4" fill="#e94560" opacity="0.055"/>
+    <rect x="180" y="502" width="400" height="16" rx="4" fill="#d4d4d4" opacity="0.03"/>
+    <rect x="180" y="532" width="290" height="16" rx="4" fill="#d4d4d4" opacity="0.025"/>
+
+    <!-- Prompt 2 -->
+    <text x="180" y="620" font-family="'SF Mono',ui-monospace,monospace" font-size="50" fill="url(#accent)" font-weight="700" filter="url(#glow)" opacity="0.7">❯</text>
+    <rect x="244" y="592" width="180" height="32" rx="5" fill="#e94560" opacity="0.06"/>
+
+    <!-- Faint output -->
+    <rect x="180" y="644" width="280" height="14" rx="3" fill="#d4d4d4" opacity="0.025"/>
+    <rect x="180" y="668" width="360" height="14" rx="3" fill="#d4d4d4" opacity="0.02"/>
+
+    <!-- Prompt 3 — very faded, depth effect -->
+    <text x="180" y="750" font-family="'SF Mono',ui-monospace,monospace" font-size="44" fill="url(#accent)" font-weight="700" opacity="0.2">❯</text>
+  </g>
+</svg>

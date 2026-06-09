@@ -58,6 +58,9 @@ export interface TerminalRef {
   cwd: string;
   title: string;
   lastDir: string;
+  lastActiveAt: number;
+  bufferTrimmed: boolean;
+  commandMarks: number[]; // buffer line positions of command starts (OSC 133 A)
 }
 
 export interface FileTab {
@@ -66,6 +69,7 @@ export interface FileTab {
   name: string;
   ext: string;
   isMd: boolean;
+  isImage: boolean;
   content: string;
 }
 
@@ -73,8 +77,10 @@ export interface FileEntry {
   name: string;
   path: string;
   is_dir: boolean;
+  size: number;
+  modified: number;
 }
 
 export type CursorStyle = "block" | "bar" | "underline";
-export type UiTheme = "dark" | "light";
+export type UiTheme = "dark" | "light" | "daylight";
 export type ActiveView = "terminals" | "workspace-editor";

@@ -1,13 +1,11 @@
 mod daemon_client;
 
 use daemon_client::DaemonClient;
-use terminalhub_shared::protocol::*;
+use agent_workspace_shared::protocol::*;
 use serde::{Deserialize, Serialize};
 use std::os::windows::process::CommandExt;
 use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
-use tauri::menu::{MenuBuilder, MenuItemBuilder};
-use tauri::tray::TrayIconBuilder;
 
 struct AppState {
     daemon: Arc<DaemonClient>,
@@ -173,6 +171,8 @@ struct FileEntry {
     name: String,
     path: String,
     is_dir: bool,
+    size: u64,
+    modified: u64,
 }
 
 #[tauri::command]
@@ -183,8 +183,14 @@ fn list_dir(path: String) -> Result<Vec<FileEntry>, String> {
         .filter_map(|e| {
             let name = e.file_name().to_string_lossy().to_string();
             let path = e.path().to_string_lossy().to_string();
-            let is_dir = e.file_type().ok()?.is_dir();
-            Some(FileEntry { name, path, is_dir })
+            let meta = e.metadata().ok()?;
+            let is_dir = meta.is_dir();
+            let size = meta.len();
+            let modified = meta.modified().ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            Some(FileEntry { name, path, is_dir, size, modified })
         })
         .collect();
     result.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.cmp(&b.name)));
@@ -194,6 +200,19 @@ fn list_dir(path: String) -> Result<Vec<FileEntry>, String> {
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn read_file_bytes(path: String) -> Result<Vec<u8>, String> {
+    std::fs::read(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn write_file(path: String, contents: String) -> Result<(), String> {
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, contents).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -285,26 +304,55 @@ async fn connect_to_daemon() -> Result<(Arc<DaemonClient>, tokio::sync::mpsc::Un
         .map_err(|e| e.to_string())?
         .parent()
         .ok_or("No parent dir")?
-        .join("terminalhub-daemon.exe");
+        .join("agent-workspace-daemon.exe");
 
-    if daemon_exe.exists() {
-        std::process::Command::new(&daemon_exe)
-            .creation_flags(0x00000008) // DETACHED_PROCESS
-            .spawn()
-            .map_err(|e| format!("Failed to launch daemon: {}", e))?;
-    } else {
-        // Dev mode: try cargo run
-        std::process::Command::new("cargo")
-            .args(["run", "-p", "terminalhub-daemon"])
-            .current_dir(std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().parent().unwrap())
-            .creation_flags(0x00000008)
-            .spawn()
-            .map_err(|e| format!("Failed to launch daemon via cargo: {}", e))?;
+    // CREATE_NEW_PROCESS_GROUP (0x200) — daemon gets its own process group
+    // CREATE_BREAKAWAY_FROM_JOB (0x01000000) — escapes tauri dev's job object
+    // We avoid DETACHED_PROCESS (0x8) because it breaks the Win32 message loop needed for tray icon.
+    const FLAGS_BREAKAWAY: u32 = 0x00000200 | 0x01000000;
+    const FLAGS_NO_BREAKAWAY: u32 = 0x00000200;
+
+    let spawn_with_flags = |flags: u32| -> std::io::Result<()> {
+        if daemon_exe.exists() {
+            std::process::Command::new(&daemon_exe)
+                .creation_flags(flags)
+                .spawn()?;
+        } else {
+            // Dev mode: launch pre-built daemon exe from daemon/target/debug/
+            let project_root = std::env::current_exe().unwrap()
+                .parent().unwrap()  // target/debug
+                .parent().unwrap()  // target
+                .parent().unwrap()  // src-tauri
+                .parent().unwrap()  // project root
+                .to_path_buf();
+            let dev_daemon = project_root.join("daemon").join("target").join("debug").join("agent-workspace-daemon.exe");
+            if dev_daemon.exists() {
+                std::process::Command::new(&dev_daemon)
+                    .creation_flags(flags)
+                    .spawn()?;
+            } else {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Daemon not found. Build it first: cargo build --manifest-path daemon/Cargo.toml"),
+                ));
+            }
+        }
+        Ok(())
+    };
+
+    if let Err(e) = spawn_with_flags(FLAGS_BREAKAWAY) {
+        if e.raw_os_error() == Some(5) {
+            // Job object doesn't allow breakaway (common in tauri dev / CI) — retry without it
+            spawn_with_flags(FLAGS_NO_BREAKAWAY)
+                .map_err(|e| format!("Failed to launch daemon: {}", e))?;
+        } else {
+            return Err(format!("Failed to launch daemon: {}", e));
+        }
     }
 
-    // Wait for daemon to start
-    for i in 0..15 {
-        tokio::time::sleep(std::time::Duration::from_millis(if i < 3 { 200 } else { 500 })).await;
+    // Wait for daemon to start (in dev mode, cargo needs to compile first — can take 60s+)
+    for i in 0..60 {
+        tokio::time::sleep(std::time::Duration::from_millis(if i < 5 { 300 } else { 1000 })).await;
         if let Ok(result) = DaemonClient::connect().await {
             return Ok(result);
         }
@@ -336,6 +384,28 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(AppState { daemon: daemon.clone() })
         .setup(move |app| {
+            // Disable WebView2 built-in browser accelerators (Ctrl+F find bar, Ctrl+R reload,
+            // Ctrl+P print, Ctrl+J downloads, Ctrl+U view-source, F12 devtools, etc.).
+            // These are handled at a lower level than JS — preventDefault() in JS is too late.
+            // SetAreBrowserAcceleratorKeysEnabled(false) stops WebView2 from consuming them,
+            // so the keydown event reaches JS normally and our handlers can act on it.
+            // NOTE: does NOT affect editing shortcuts (Ctrl+C/V/X/Z/A).
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.with_webview(|wv| {
+                    unsafe {
+                        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
+                        use windows_core::Interface;
+                        if let Ok(core) = wv.controller().CoreWebView2() {
+                            if let Ok(settings) = core.Settings() {
+                                if let Ok(s3) = settings.cast::<ICoreWebView2Settings3>() {
+                                    let _ = s3.SetAreBrowserAcceleratorKeysEnabled(false);
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
             let handle = app.handle().clone();
 
             // Spawn push receiver that emits Tauri events
@@ -348,73 +418,17 @@ pub fn run() {
                         DaemonResponse::TerminalExited { id, .. } => {
                             let _ = handle.emit(&format!("pty-exit-{}", id), ());
                         }
-                        _ => {}
-                    }
-                }
-            });
-
-            // Tray icon
-            let tray_handle = app.handle().clone();
-            let show = MenuItemBuilder::with_id("show", "Open Agent Workspace").build(app)?;
-            let kill_all = MenuItemBuilder::with_id("kill_all", "Kill all terminals").build(app)?;
-            let shutdown = MenuItemBuilder::with_id("shutdown", "Shutdown daemon & quit").build(app)?;
-            let menu = MenuBuilder::new(app)
-                .item(&show)
-                .separator()
-                .item(&kill_all)
-                .item(&shutdown)
-                .build()?;
-
-            let icon = tauri::image::Image::from_bytes(include_bytes!("../../../icons/icon.ico"))?;
-
-            TrayIconBuilder::new()
-                .icon(icon)
-                .tooltip("Agent Workspace")
-                .menu(&menu)
-                .on_menu_event(move |app_handle, event| {
-                    match event.id().as_ref() {
-                        "show" => {
-                            if let Some(w) = app_handle.get_webview_window("main") {
+                        DaemonResponse::ShowWindow => {
+                            if let Some(w) = handle.get_webview_window("main") {
                                 let _ = w.show();
                                 let _ = w.unminimize();
                                 let _ = w.set_focus();
                             }
                         }
-                        "kill_all" => {
-                            let daemon = app_handle.state::<AppState>().daemon.clone();
-                            tauri::async_runtime::spawn(async move {
-                                let seq = daemon.next_seq();
-                                if let Ok(DaemonResponse::TerminalList { terminals, .. }) =
-                                    daemon.request(&DaemonRequest::ListTerminals { seq }).await
-                                {
-                                    for t in terminals {
-                                        let seq = daemon.next_seq();
-                                        let _ = daemon.request(&DaemonRequest::Kill { seq, id: t.id }).await;
-                                    }
-                                }
-                            });
-                        }
-                        "shutdown" => {
-                            let daemon = app_handle.state::<AppState>().daemon.clone();
-                            let handle = app_handle.clone();
-                            tauri::async_runtime::spawn(async move {
-                                let _ = daemon.fire_and_forget(&DaemonRequest::Shutdown).await;
-                                handle.exit(0);
-                            });
-                        }
                         _ => {}
                     }
-                })
-                .on_tray_icon_event(move |_tray, event| {
-                    if let tauri::tray::TrayIconEvent::DoubleClick { .. } = event {
-                        if let Some(w) = tray_handle.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.unminimize();
-                            let _ = w.set_focus();
-                        }
-                    }
-                })
-                .build(app)?;
+                }
+            });
 
             Ok(())
         })
@@ -447,6 +461,8 @@ pub fn run() {
             daemon_status,
             list_dir,
             read_file,
+            read_file_bytes,
+            write_file,
             get_home_dir,
             get_cwd,
             open_folder,

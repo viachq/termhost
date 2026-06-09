@@ -58,7 +58,11 @@ export default function FileViewer() {
       </div>
       <div className={s.content}>
         {activeTab &&
-          (activeTab.isMd ? (
+          (activeTab.isImage ? (
+            <div className={s.imagePreview}>
+              <img src={activeTab.content} alt={activeTab.name} />
+            </div>
+          ) : activeTab.isMd ? (
             <MarkdownPreview content={activeTab.content} filePath={activeTab.path} />
           ) : (
             <Suspense

@@ -43,6 +43,28 @@ html, body {
   --focus-glow: rgba(233, 69, 96, 0.2);
 }
 
+/* ── Daylight Theme — warm, easy on the eyes ── */
+
+[data-ui-theme="daylight"] {
+  --bg: #e8e0d4;
+  --bg-sidebar: #ddd5c8;
+  --bg-surface: #d4cbbe;
+  --bg-terminal: #f0ebe1;
+  --bg-header: #e2dace;
+  --bg-tabs: #dbd3c6;
+  --text: #3b3228;
+  --text-dim: #7a7068;
+  --border: #c4b8a8;
+  --focus-glow: rgba(212, 90, 104, 0.2);
+}
+
+[data-ui-theme="daylight"] [data-pane-focused="true"] .xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(59, 50, 40, 0.15);
+}
+[data-ui-theme="daylight"] [data-pane-focused="true"] .xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 50, 40, 0.3);
+}
+
 [data-ui-theme="light"] [data-pane-focused="true"] .xterm .xterm-viewport::-webkit-scrollbar-thumb {
   background: rgba(0,0,0,0.15);
 }
@@ -50,18 +72,24 @@ html, body {
   background: rgba(0,0,0,0.3);
 }
 
-/* ── Scrollbar — 1px invisible so xterm measures real width (avoids 15px fallback) ── */
-::-webkit-scrollbar { width: 0; height: 0; }
-.xterm .xterm-viewport::-webkit-scrollbar { width: 1px; }
-.xterm .xterm-viewport::-webkit-scrollbar-track { background: transparent; }
-.xterm .xterm-viewport::-webkit-scrollbar-thumb { background: transparent; }
+/* ── xterm box-sizing reset — global * uses border-box but xterm expects content-box ── */
+.xterm, .xterm * {
+  box-sizing: content-box;
+}
 
-/* Show scrollbar only on focused terminal pane */
-[data-pane-focused="true"] .xterm .xterm-viewport::-webkit-scrollbar { width: 6px; }
-[data-pane-focused="true"] .xterm .xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+/* ── Scrollbar — fixed 6px width to prevent cols jitter on focus change ── */
+::-webkit-scrollbar { width: 0; height: 0; }
+.xterm .xterm-viewport::-webkit-scrollbar { width: 6px; }
+.xterm .xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+.xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+  transition: background 0.15s;
+}
+
+/* Show scrollbar thumb only on focused terminal pane */
 [data-pane-focused="true"] .xterm .xterm-viewport::-webkit-scrollbar-thumb {
   background: rgba(255,255,255,0.15);
-  border-radius: 3px;
 }
 [data-pane-focused="true"] .xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
   background: rgba(255,255,255,0.3);

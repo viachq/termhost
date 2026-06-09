@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useEffect } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { useMobileStore } from "./store/mobileStore";
@@ -9,17 +9,22 @@ import { TabBar } from "./components/TabBar";
 import { Toolbar } from "./components/Toolbar";
 import { InputRow } from "./components/InputRow";
 import { WorkspacePicker } from "./components/WorkspacePicker";
+import { ClipboardPage } from "./components/ClipboardPage";
+import { Toast } from "./components/Toast";
 
 export function App() {
   const {
     connection,
     terminals,
     activeTerminalId,
+    activeTab,
     showWorkspacePicker,
     setTerminals,
     setActiveTerminalId,
     setWorkspaces,
     setShowWorkspacePicker,
+    setActiveTab,
+    showToast,
   } = useMobileStore();
 
   const termRegistry = useRef<Map<string, { term: Terminal; fit: FitAddon }>>(
@@ -45,9 +50,12 @@ export function App() {
         case "workspaces":
           setWorkspaces(msg.data, msg.activeIdx);
           break;
+        case "clipboard_ok":
+          showToast(msg.ok ? "Copied to PC clipboard" : "Failed to copy");
+          break;
       }
     },
-    [setTerminals, setActiveTerminalId, setWorkspaces]
+    [setTerminals, setActiveTerminalId, setWorkspaces, showToast]
   );
 
   const { connect, send } = useSocket(handleMessage);
@@ -66,20 +74,11 @@ export function App() {
     [send]
   );
 
-  const handleResize = useCallback(
-    (cols: number, rows: number) => {
-      const id = useMobileStore.getState().activeTerminalId;
-      if (id) send({ type: "resize", id, cols, rows });
-    },
-    [send]
-  );
-
   const handleSelectTerminal = useCallback(
     (id: string) => {
       setActiveTerminalId(id);
-      send({ type: "input", id, data: "" });
     },
-    [setActiveTerminalId, send]
+    [setActiveTerminalId]
   );
 
   const handleSwitchWorkspace = useCallback(
@@ -103,6 +102,13 @@ export function App() {
     [send]
   );
 
+  const handleClipboard = useCallback(
+    (data: string) => {
+      send({ type: "clipboard", data });
+    },
+    [send]
+  );
+
   const registerTerminal = useCallback(
     (id: string, term: Terminal, fit: FitAddon) => {
       termRegistry.current.set(id, { term, fit });
@@ -120,27 +126,51 @@ export function App() {
 
   return (
     <div className="m-app">
-      <TabBar
-        onSelect={handleSelectTerminal}
-        onWorkspaceClick={() => setShowWorkspacePicker(true)}
-      />
-
-      <div className="m-terminal-area">
-        {terminals.map((t) => (
-          <TerminalViewWrapper
-            key={t.id}
-            id={t.id}
-            active={t.id === activeTerminalId}
-            onData={handleTerminalData}
-            onResize={handleResize}
-            onRegister={registerTerminal}
-            onUnregister={unregisterTerminal}
+      {activeTab === "terminal" ? (
+        <>
+          <TabBar
+            onSelect={handleSelectTerminal}
+            onWorkspaceClick={() => setShowWorkspacePicker(true)}
           />
-        ))}
+
+          <div className="m-terminal-area">
+            {terminals.map((t) => (
+              <TerminalViewWrapper
+                key={t.id}
+                id={t.id}
+                active={t.id === activeTerminalId}
+                onData={handleTerminalData}
+                onRegister={registerTerminal}
+                onUnregister={unregisterTerminal}
+              />
+            ))}
+          </div>
+
+          <Toolbar onKey={handleTerminalData} />
+          <InputRow onSend={handleTerminalData} onClipboard={handleClipboard} />
+        </>
+      ) : (
+        <ClipboardPage onSend={handleClipboard} />
+      )}
+
+      <div className="m-bottom-nav">
+        <button
+          className={`m-nav-btn ${activeTab === "terminal" ? "active" : ""}`}
+          onClick={() => setActiveTab("terminal")}
+        >
+          <span className="m-nav-icon">&#xF120;</span>
+          Terminal
+        </button>
+        <button
+          className={`m-nav-btn ${activeTab === "clipboard" ? "active" : ""}`}
+          onClick={() => setActiveTab("clipboard")}
+        >
+          <span className="m-nav-icon">&#x2398;</span>
+          Clipboard
+        </button>
       </div>
 
-      <Toolbar onKey={handleTerminalData} />
-      <InputRow onSend={handleTerminalData} />
+      <Toast />
 
       {showWorkspacePicker && (
         <WorkspacePicker
@@ -158,20 +188,18 @@ function TerminalViewWrapper({
   id,
   active,
   onData,
-  onResize,
   onRegister,
   onUnregister,
 }: {
   id: string;
   active: boolean;
   onData: (data: string) => void;
-  onResize: (cols: number, rows: number) => void;
   onRegister: (id: string, term: Terminal, fit: FitAddon) => void;
   onUnregister: (id: string) => void;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const roRef = useRef<ResizeObserver | null>(null);
   const initializedRef = useRef(false);
 
   const refCallback = useCallback(
@@ -213,7 +241,6 @@ function TerminalViewWrapper({
         term.loadAddon(fitAddon);
         term.open(el);
         term.onData(onData);
-        term.onResize(({ cols, rows }) => onResize(cols, rows));
 
         termRef.current = term;
         fitRef.current = fitAddon;
@@ -225,17 +252,19 @@ function TerminalViewWrapper({
           if (fitRef.current) fitRef.current.fit();
         });
         ro.observe(el);
+        roRef.current = ro;
       }
     },
-    [id, onData, onResize, onRegister]
+    [id, onData, onRegister]
   );
 
-  useRef(() => {
+  useEffect(() => {
     return () => {
+      roRef.current?.disconnect();
       onUnregister(id);
       termRef.current?.dispose();
     };
-  });
+  }, [id, onUnregister]);
 
   return (
     <div

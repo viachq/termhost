@@ -1,0 +1,12 @@
+C:\Users\viach\Desktop\TerminalHub\daemon\target\debug\deps\bitflags-41884b3f97514bc2.d: C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\lib.rs C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\iter.rs C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\parser.rs C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\traits.rs C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\public.rs C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\internal.rs C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\external.rs C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\external\serde.rs
+
+C:\Users\viach\Desktop\TerminalHub\daemon\target\debug\deps\libbitflags-41884b3f97514bc2.rmeta: C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\lib.rs C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\iter.rs C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\parser.rs C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\traits.rs C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\public.rs C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\internal.rs C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\external.rs C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\external\serde.rs
+
+C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\lib.rs:
+C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\iter.rs:
+C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\parser.rs:
+C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\traits.rs:
+C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\public.rs:
+C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\internal.rs:
+C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\external.rs:
+C:\Users\viach\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bitflags-2.13.0\src\external\serde.rs:

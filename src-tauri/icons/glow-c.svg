@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="r"><rect width="1024" height="1024" rx="220"/></clipPath>
+    <radialGradient id="bg" cx="50%" cy="48%" r="62%">
+      <stop offset="0%" stop-color="#120a14"/>
+      <stop offset="100%" stop-color="#050506"/>
+    </radialGradient>
+    <filter id="g2"><feGaussianBlur stdDeviation="14"/></filter>
+    <filter id="g3">
+      <feGaussianBlur stdDeviation="8" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="ag" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff6b8a"/>
+      <stop offset="100%" stop-color="#e94560"/>
+    </linearGradient>
+    <linearGradient id="pg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <g clip-path="url(#r)">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+    <ellipse cx="512" cy="480" rx="320" ry="260" fill="#a855f7" opacity="0.03"/>
+    <ellipse cx="512" cy="480" rx="200" ry="180" fill="#e94560" opacity="0.04"/>
+
+    <!-- Terminal — large, full width feel -->
+    <rect x="110" y="150" width="804" height="720" rx="32" fill="#0a0a0e" stroke="#1e1e26" stroke-width="2.5"/>
+
+    <!-- Title bar -->
+    <rect x="110" y="150" width="804" height="50" rx="32" fill="#101014"/>
+    <rect x="110" y="178" width="804" height="22" fill="#101014"/>
+    <line x1="110" y1="200" x2="914" y2="200" stroke="#1a1a22" stroke-width="2"/>
+
+    <!-- Mac dots -->
+    <circle cx="162" cy="175" r="9" fill="#ff5f57"/>
+    <circle cx="194" cy="175" r="9" fill="#febc2e"/>
+    <circle cx="226" cy="175" r="9" fill="#28c840"/>
+
+    <!-- Tab bar -->
+    <rect x="110" y="200" width="804" height="36" fill="#0d0d11"/>
+    <line x1="110" y1="236" x2="914" y2="236" stroke="#1a1a22" stroke-width="1"/>
+    <!-- Active tab -->
+    <rect x="130" y="206" width="100" height="24" rx="5" fill="#e94560" opacity="0.12"/>
+    <line x1="130" y1="230" x2="230" y2="230" stroke="#e94560" stroke-width="2.5" opacity="0.7"/>
+    <!-- Inactive tabs -->
+    <rect x="244" y="206" width="80" height="24" rx="5" fill="#ffffff" opacity="0.03"/>
+    <rect x="338" y="206" width="80" height="24" rx="5" fill="#ffffff" opacity="0.03"/>
+
+    <!-- Prompt 1 with purple accent -->
+    <text x="162" y="310" font-family="monospace" font-size="48" fill="url(#ag)" font-weight="bold" filter="url(#g3)">❯</text>
+    <rect x="214" y="284" width="320" height="30" rx="6" fill="#e94560" opacity="0.1"/>
+    <rect x="546" y="282" width="20" height="36" rx="3" fill="#e94560" filter="url(#g2)"/>
+
+    <!-- Output with color variety -->
+    <rect x="162" y="336" width="380" height="16" rx="3" fill="#28c840" opacity="0.08"/>
+    <rect x="162" y="362" width="280" height="16" rx="3" fill="#ffffff" opacity="0.04"/>
+    <rect x="162" y="388" width="440" height="16" rx="3" fill="#a855f7" opacity="0.06"/>
+    <rect x="162" y="414" width="200" height="16" rx="3" fill="#ffffff" opacity="0.04"/>
+    <rect x="162" y="440" width="360" height="16" rx="3" fill="#febc2e" opacity="0.06"/>
+    <rect x="162" y="466" width="300" height="16" rx="3" fill="#ffffff" opacity="0.03"/>
+    <rect x="162" y="492" width="240" height="16" rx="3" fill="#e94560" opacity="0.05"/>
+    <rect x="162" y="518" width="400" height="16" rx="3" fill="#ffffff" opacity="0.03"/>
+
+    <!-- Prompt 2 -->
+    <text x="162" y="590" font-family="monospace" font-size="48" fill="url(#ag)" font-weight="bold" filter="url(#g3)">❯</text>
+    <rect x="214" y="566" width="180" height="28" rx="5" fill="#a855f7" opacity="0.08"/>
+
+    <!-- Some more output -->
+    <rect x="162" y="616" width="260" height="14" rx="3" fill="#ffffff" opacity="0.03"/>
+    <rect x="162" y="640" width="340" height="14" rx="3" fill="#ffffff" opacity="0.02"/>
+
+    <!-- Prompt 3 faded -->
+    <text x="162" y="710" font-family="monospace" font-size="48" fill="url(#ag)" font-weight="bold" opacity="0.35">❯</text>
+
+    <!-- Bottom workspace indicator dots -->
+    <g transform="translate(432, 830)">
+      <circle cx="0" cy="0" r="6" fill="#e94560" opacity="0.8"/>
+      <circle cx="24" cy="0" r="6" fill="#a855f7" opacity="0.4"/>
+      <circle cx="48" cy="0" r="6" fill="#ffffff" opacity="0.15"/>
+    </g>
+
+    <!-- Edge glow -->
+    <ellipse cx="512" cy="870" rx="300" ry="40" fill="#a855f7" opacity="0.04"/>
+  </g>
+</svg>

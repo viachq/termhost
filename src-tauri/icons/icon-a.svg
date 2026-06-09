@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="r"><rect width="1024" height="1024" rx="220"/></clipPath>
+    <radialGradient id="bg" cx="50%" cy="45%" r="70%">
+      <stop offset="0%" stop-color="#100810"/>
+      <stop offset="100%" stop-color="#030304"/>
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="cursorGlow">
+      <feGaussianBlur stdDeviation="14" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="ac" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff6b8a"/>
+      <stop offset="100%" stop-color="#e94560"/>
+    </linearGradient>
+  </defs>
+  <g clip-path="url(#r)">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+    <ellipse cx="512" cy="480" rx="300" ry="260" fill="#e94560" opacity="0.03"/>
+
+    <!-- Terminal — uniform rounded rect -->
+    <rect x="140" y="140" width="744" height="744" rx="40" fill="#0a0a0e" stroke="#1c1c24" stroke-width="2"/>
+
+    <!-- Mac dots -->
+    <circle cx="200" cy="200" r="14" fill="#ff5f57"/>
+    <circle cx="244" cy="200" r="14" fill="#febc2e"/>
+    <circle cx="288" cy="200" r="14" fill="#28c840"/>
+
+    <!-- Prompt 1 -->
+    <text x="180" y="340" font-family="monospace" font-size="72" fill="url(#ac)" font-weight="700" filter="url(#glow)">❯</text>
+    <rect x="268" y="296" width="360" height="48" rx="10" fill="#e94560" opacity="0.1"/>
+    <rect x="644" y="294" width="26" height="54" rx="5" fill="#e94560" filter="url(#cursorGlow)"/>
+
+    <!-- Output -->
+    <rect x="180" y="380" width="440" height="28" rx="6" fill="#28c840" opacity="0.1"/>
+    <rect x="180" y="422" width="320" height="28" rx="6" fill="#d4d4d4" opacity="0.05"/>
+    <rect x="180" y="464" width="520" height="28" rx="6" fill="#d4d4d4" opacity="0.04"/>
+    <rect x="180" y="506" width="260" height="28" rx="6" fill="#febc2e" opacity="0.08"/>
+
+    <!-- Prompt 2 -->
+    <text x="180" y="630" font-family="monospace" font-size="64" fill="url(#ac)" font-weight="700" filter="url(#glow)" opacity="0.6">❯</text>
+    <rect x="260" y="592" width="240" height="42" rx="8" fill="#e94560" opacity="0.06"/>
+
+    <!-- Prompt 3 faded -->
+    <text x="180" y="770" font-family="monospace" font-size="56" fill="url(#ac)" font-weight="700" opacity="0.2">❯</text>
+  </g>
+</svg>

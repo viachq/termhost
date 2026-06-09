@@ -2,11 +2,13 @@ import { create } from "zustand";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ActiveView } from "../types";
 
-export type ExplorerTab = "files" | "browser" | "preview" | "graph" | "translate" | "settings";
+export type ExplorerTab = "files" | "browser" | "preview" | "graph" | "translate" | "ssh" | "mcp" | "settings";
 
 interface PanelState {
   explorerOpen: boolean;
   explorerTab: ExplorerTab;
+  secondaryTab: ExplorerTab | null;
+  splitRatio: number;
   explorerWidth: number;
   searchVisible: boolean;
   activeView: ActiveView;
@@ -14,6 +16,9 @@ interface PanelState {
 
   openExplorer: (tab: ExplorerTab) => void;
   toggleExplorer: (tab: ExplorerTab) => void;
+  openSecondary: (tab: ExplorerTab) => void;
+  closeSecondary: () => void;
+  setSplitRatio: (r: number) => void;
   setExplorerWidth: (w: number) => void;
   toggleSearch: () => void;
   toggleTranslate: () => void;
@@ -36,16 +41,29 @@ interface PanelState {
 export const usePanelStore = create<PanelState>((set, get) => ({
   explorerOpen: false,
   explorerTab: "files",
+  secondaryTab: null,
+  splitRatio: 0.5,
   explorerWidth: 380,
   searchVisible: false,
   activeView: "terminals",
   fullscreen: false,
 
-  openExplorer: (tab) => set({ explorerOpen: true, explorerTab: tab }),
-  toggleExplorer: (tab) => set((s) => {
-    if (s.explorerOpen && s.explorerTab === tab) return { explorerOpen: false };
+  openExplorer: (tab) => set((s) => {
+    if (s.secondaryTab === tab) return { explorerOpen: true, explorerTab: tab, secondaryTab: s.explorerTab };
     return { explorerOpen: true, explorerTab: tab };
   }),
+  toggleExplorer: (tab) => set((s) => {
+    if (s.explorerOpen && s.explorerTab === tab && !s.secondaryTab) return { explorerOpen: false };
+    if (s.explorerOpen && s.explorerTab === tab && s.secondaryTab) return { explorerTab: s.secondaryTab, secondaryTab: null };
+    if (s.secondaryTab === tab) return { secondaryTab: null };
+    return { explorerOpen: true, explorerTab: tab };
+  }),
+  openSecondary: (tab) => set((s) => {
+    if (tab === s.explorerTab) return {};
+    return { explorerOpen: true, secondaryTab: tab };
+  }),
+  closeSecondary: () => set({ secondaryTab: null }),
+  setSplitRatio: (r) => set({ splitRatio: r }),
   setExplorerWidth: (w) => set({ explorerWidth: w }),
 
   toggleFullscreen: () => {

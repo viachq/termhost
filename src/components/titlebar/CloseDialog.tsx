@@ -24,7 +24,7 @@ export default function CloseDialog() {
   };
 
   const handleCloseOnly = () => {
-    getCurrentWindow().destroy();
+    getCurrentWindow().hide();
   };
 
   const handleCancel = () => {
@@ -42,9 +42,6 @@ export default function CloseDialog() {
           <button className={s.btnSecondary} onClick={handleCancel}>Cancel</button>
           <button className={s.btnPrimary} onClick={handleKeepAlive}>
             Hide to tray
-          </button>
-          <button className={s.btnSecondary} onClick={handleCloseOnly}>
-            Close window
           </button>
           <button className={s.btnDanger} onClick={handleKillAll}>
             Kill all & quit

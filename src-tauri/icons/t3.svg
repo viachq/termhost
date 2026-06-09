@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="r"><rect width="1024" height="1024" rx="220"/></clipPath>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f2027"/>
+      <stop offset="50%" stop-color="#203a43"/>
+      <stop offset="100%" stop-color="#2c5364"/>
+    </linearGradient>
+    <filter id="sh">
+      <feDropShadow dx="0" dy="12" stdDeviation="36" flood-color="#000" flood-opacity="0.55"/>
+    </filter>
+    <filter id="gl">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="ac" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff6b8a"/>
+      <stop offset="100%" stop-color="#e94560"/>
+    </linearGradient>
+    <linearGradient id="tb" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#141420"/>
+      <stop offset="100%" stop-color="#0c0c16"/>
+    </linearGradient>
+  </defs>
+  <g clip-path="url(#r)">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+
+    <rect x="152" y="152" width="720" height="720" rx="36" fill="url(#tb)" filter="url(#sh)"/>
+    <rect x="152" y="152" width="720" height="720" rx="36" fill="none" stroke="#fff" stroke-width="1" opacity="0.07"/>
+
+    <!-- Title bar -->
+    <rect x="152" y="152" width="720" height="58" rx="36" fill="#1a1a2a"/>
+    <rect x="152" y="188" width="720" height="22" fill="#1a1a2a"/>
+    <circle cx="210" cy="184" r="13" fill="#ff5f57"/>
+    <circle cx="250" cy="184" r="13" fill="#febc2e"/>
+    <circle cx="290" cy="184" r="13" fill="#28c840"/>
+
+    <!-- Code-like output — syntax highlighted -->
+    <!-- Line numbers column -->
+    <rect x="200" y="240" width="40" height="540" rx="4" fill="#fff" opacity="0.02"/>
+
+    <!-- Line 1 — import -->
+    <rect x="200" y="248" width="36" height="20" rx="3" fill="#fff" opacity="0.06"/>
+    <rect x="256" y="248" width="80" height="20" rx="4" fill="#c792ea" opacity="0.25"/>
+    <rect x="350" y="248" width="120" height="20" rx="4" fill="#fff" opacity="0.08"/>
+    <rect x="484" y="248" width="60" height="20" rx="4" fill="#c792ea" opacity="0.25"/>
+    <rect x="558" y="248" width="140" height="20" rx="4" fill="#c3e88d" opacity="0.2"/>
+
+    <!-- Line 2 — import -->
+    <rect x="200" y="284" width="36" height="20" rx="3" fill="#fff" opacity="0.06"/>
+    <rect x="256" y="284" width="80" height="20" rx="4" fill="#c792ea" opacity="0.25"/>
+    <rect x="350" y="284" width="160" height="20" rx="4" fill="#fff" opacity="0.08"/>
+    <rect x="524" y="284" width="60" height="20" rx="4" fill="#c792ea" opacity="0.25"/>
+    <rect x="598" y="284" width="120" height="20" rx="4" fill="#c3e88d" opacity="0.2"/>
+
+    <!-- Line 3 — blank -->
+    <rect x="200" y="320" width="36" height="20" rx="3" fill="#fff" opacity="0.06"/>
+
+    <!-- Line 4 — function -->
+    <rect x="200" y="356" width="36" height="20" rx="3" fill="#fff" opacity="0.06"/>
+    <rect x="256" y="356" width="100" height="20" rx="4" fill="#82aaff" opacity="0.25"/>
+    <rect x="370" y="356" width="140" height="20" rx="4" fill="#ffcb6b" opacity="0.2"/>
+    <rect x="524" y="356" width="30" height="20" rx="4" fill="#fff" opacity="0.1"/>
+
+    <!-- Line 5 — body -->
+    <rect x="200" y="392" width="36" height="20" rx="3" fill="#fff" opacity="0.06"/>
+    <rect x="276" y="392" width="80" height="20" rx="4" fill="#c792ea" opacity="0.2"/>
+    <rect x="370" y="392" width="200" height="20" rx="4" fill="#fff" opacity="0.06"/>
+
+    <!-- Line 6 — return -->
+    <rect x="200" y="428" width="36" height="20" rx="3" fill="#fff" opacity="0.06"/>
+    <rect x="276" y="428" width="80" height="20" rx="4" fill="#c792ea" opacity="0.2"/>
+    <rect x="370" y="428" width="60" height="20" rx="4" fill="#89ddff" opacity="0.2"/>
+    <rect x="444" y="428" width="160" height="20" rx="4" fill="#c3e88d" opacity="0.18"/>
+
+    <!-- Line 7 — closing -->
+    <rect x="200" y="464" width="36" height="20" rx="3" fill="#fff" opacity="0.06"/>
+    <rect x="256" y="464" width="20" height="20" rx="4" fill="#fff" opacity="0.1"/>
+
+    <!-- Line 8 — blank -->
+    <rect x="200" y="500" width="36" height="20" rx="3" fill="#fff" opacity="0.06"/>
+
+    <!-- Line 9 — export -->
+    <rect x="200" y="536" width="36" height="20" rx="3" fill="#fff" opacity="0.06"/>
+    <rect x="256" y="536" width="80" height="20" rx="4" fill="#c792ea" opacity="0.25"/>
+    <rect x="350" y="536" width="60" height="20" rx="4" fill="#c792ea" opacity="0.2"/>
+    <rect x="424" y="536" width="160" height="20" rx="4" fill="#ffcb6b" opacity="0.2"/>
+
+    <!-- Line 10+ fading -->
+    <rect x="200" y="572" width="36" height="20" rx="3" fill="#fff" opacity="0.05"/>
+    <rect x="256" y="572" width="300" height="20" rx="4" fill="#fff" opacity="0.04"/>
+
+    <rect x="200" y="608" width="36" height="20" rx="3" fill="#fff" opacity="0.04"/>
+    <rect x="256" y="608" width="200" height="20" rx="4" fill="#fff" opacity="0.03"/>
+
+    <!-- Cursor line highlight -->
+    <rect x="196" y="534" width="540" height="24" rx="4" fill="#e94560" opacity="0.04"/>
+
+    <!-- Cursor -->
+    <rect x="584" y="534" width="16" height="24" rx="3" fill="#e94560" opacity="0.8"/>
+  </g>
+</svg>

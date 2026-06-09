@@ -24,20 +24,20 @@ interface SettingsState {
 }
 
 function save(state: SettingsState) {
-  localStorage.setItem("terminalhub-ui-theme", state.uiTheme);
-  localStorage.setItem("terminalhub-theme", state.activeThemeKey);
-  localStorage.setItem("terminalhub-fontsize", String(state.termFontSize));
-  localStorage.setItem("terminalhub-fontfamily", state.termFontFamily);
-  localStorage.setItem("terminalhub-cursorstyle", state.termCursorStyle);
-  localStorage.setItem("terminalhub-uiscale", String(state.uiScale));
-  localStorage.setItem("terminalhub-split-resize", state.splitResizeEnabled ? "1" : "0");
+  localStorage.setItem("agentworkspace-ui-theme", state.uiTheme);
+  localStorage.setItem("agentworkspace-theme", state.activeThemeKey);
+  localStorage.setItem("agentworkspace-fontsize", String(state.termFontSize));
+  localStorage.setItem("agentworkspace-fontfamily", state.termFontFamily);
+  localStorage.setItem("agentworkspace-cursorstyle", state.termCursorStyle);
+  localStorage.setItem("agentworkspace-uiscale", String(state.uiScale));
+  localStorage.setItem("agentworkspace-split-resize", state.splitResizeEnabled ? "1" : "0");
   document.documentElement.setAttribute("data-ui-theme", state.uiTheme);
   getCurrentWebview().setZoom(state.uiScale / 100).catch(() => {});
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   uiTheme: "dark",
-  activeThemeKey: "terminalhub",
+  activeThemeKey: "agentworkspace",
   termFontSize: 14,
   termFontFamily: "'Cascadia Mono', 'Consolas', monospace",
   termCursorStyle: "block",
@@ -45,14 +45,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   splitResizeEnabled: true,
 
   loadSettings: () => {
-    const uiTheme = (localStorage.getItem("terminalhub-ui-theme") || "dark") as UiTheme;
-    let activeThemeKey = localStorage.getItem("terminalhub-theme") || "terminalhub";
-    if (!THEMES[activeThemeKey]) activeThemeKey = "terminalhub";
-    const termFontSize = parseInt(localStorage.getItem("terminalhub-fontsize") || "14");
-    const termFontFamily = localStorage.getItem("terminalhub-fontfamily") || "'Cascadia Mono', 'Consolas', monospace";
-    const termCursorStyle = (localStorage.getItem("terminalhub-cursorstyle") || "block") as CursorStyle;
-    const uiScale = parseInt(localStorage.getItem("terminalhub-uiscale") || "100");
-    const splitResizeEnabled = localStorage.getItem("terminalhub-split-resize") !== "0";
+    const uiTheme = (localStorage.getItem("agentworkspace-ui-theme") || "dark") as UiTheme;
+    let activeThemeKey = localStorage.getItem("agentworkspace-theme") || "agentworkspace";
+    if (!THEMES[activeThemeKey]) activeThemeKey = "agentworkspace";
+    const termFontSize = parseInt(localStorage.getItem("agentworkspace-fontsize") || "14");
+    const termFontFamily = localStorage.getItem("agentworkspace-fontfamily") || "'Cascadia Mono', 'Consolas', monospace";
+    const termCursorStyle = (localStorage.getItem("agentworkspace-cursorstyle") || "block") as CursorStyle;
+    const uiScale = parseInt(localStorage.getItem("agentworkspace-uiscale") || "100");
+    const splitResizeEnabled = localStorage.getItem("agentworkspace-split-resize") !== "0";
 
     set({ uiTheme, activeThemeKey, termFontSize, termFontFamily, termCursorStyle, uiScale, splitResizeEnabled });
     document.documentElement.setAttribute("data-ui-theme", uiTheme);
@@ -64,7 +64,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     save(get());
   },
   setActiveThemeKey: (activeThemeKey) => {
-    set({ activeThemeKey });
+    const uiTheme = activeThemeKey === "daylight" ? "daylight" : activeThemeKey === "light" ? "light" : "dark";
+    set({ activeThemeKey, uiTheme });
     save(get());
   },
   setTermFontSize: (termFontSize) => {
@@ -88,5 +89,5 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     save(get());
   },
 
-  getXtermTheme: () => THEMES[get().activeThemeKey] || THEMES.terminalhub,
+  getXtermTheme: () => THEMES[get().activeThemeKey] || THEMES.agentworkspace,
 }));

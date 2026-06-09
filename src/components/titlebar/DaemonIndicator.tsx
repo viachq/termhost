@@ -144,9 +144,9 @@ export default function DaemonIndicator() {
 
           {terminals.length > 0 && (
             <div className={s.terminalList}>
-              {[...grouped.entries()].map(([wsName, items]) => (
+              {[...grouped.entries()].map(([wsName, items], gi) => (
                 <div key={wsName}>
-                  <div className={s.wsGroup}>
+                  <div className={s.wsGroup} style={gi > 0 ? { marginTop: 4, borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 12 } : undefined}>
                     <span className={s.wsName}>{wsName}</span>
                     <span className={s.wsCount}>{items.length}</span>
                   </div>
@@ -163,8 +163,8 @@ export default function DaemonIndicator() {
                           onClick={() => handleKillTerminal(t.id)}
                           title="Kill terminal"
                         >
-                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
-                            <path d="M2.5 2.5l5 5M7.5 2.5l-5 5" />
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                            <path d="M3 3l6 6M9 3l-6 6" />
                           </svg>
                         </button>
                       </div>

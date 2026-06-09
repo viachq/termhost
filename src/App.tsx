@@ -75,7 +75,7 @@ export default function App() {
     const tree = workspaceTrees.get(idx);
     if (!tree) return;
     const order = getTerminalIdsForWorkspace(idx);
-    useWorkspaceStore.getState().saveCurrentSplitTree(tree, order, terminalRefs);
+    useWorkspaceStore.getState().saveCurrentSplitTree(tree, order, terminalRefs, idx);
   }, []);
 
   useEffect(() => {
@@ -123,6 +123,9 @@ export default function App() {
   const handleSwitchWorkspace = useCallback((idx: number) => {
     const current = useWorkspaceStore.getState().activeWorkspaceIdx;
     if (idx === current) return;
+    if (useTerminalStore.getState().zoomedTerminalId) {
+      useTerminalStore.setState({ zoomedTerminalId: null });
+    }
     saveTree(current);
     clearTimeout(switchTimerRef.current);
     useWorkspaceStore.getState().setActiveWorkspaceIdx(idx);
@@ -130,17 +133,182 @@ export default function App() {
     setActiveView("terminals");
     const ids = getTerminalIdsForWorkspace(idx);
     if (ids.length > 0) setFocusedTerminalId(ids[0]);
+    ids.forEach((id) => {
+      const pane = document.querySelector(`[data-pane-id="${id}"]`) as HTMLElement | null;
+      if (pane) pane.style.visibility = "hidden";
+    });
     switchTimerRef.current = window.setTimeout(() => {
       ids.forEach((id) => {
         const ref = terminalRefs.get(id);
         if (ref) {
           ref.fitAddon.fit();
-          ref.term.refresh(0, ref.term.rows - 1);
           resizeTerminal(id, ref.term.cols, ref.term.rows).catch(() => {});
         }
       });
-    }, 80);
+      requestAnimationFrame(() => {
+        ids.forEach((id) => {
+          const pane = document.querySelector(`[data-pane-id="${id}"]`) as HTMLElement | null;
+          if (pane) pane.style.visibility = "";
+        });
+      });
+    }, 50);
   }, [saveTree, ensureWorkspaceTree, setActiveView, setFocusedTerminalId]);
+
+  const handleRotate = useCallback((id: string) => {
+    const wsIdx = useWorkspaceStore.getState().activeWorkspaceIdx;
+    const root = workspaceTrees.get(wsIdx);
+    if (!root) return;
+    function findParentSplit(node: import("./types").TreeNode, targetId: string): import("./types").SplitNode | null {
+      if (node.type === "leaf") return null;
+      const hasTarget = (n: import("./types").TreeNode): boolean =>
+        n.type === "leaf" ? n.id === targetId : hasTarget(n.first) || hasTarget(n.second);
+      if (hasTarget(node.first) || hasTarget(node.second)) {
+        const inFirst = findParentSplit(node.first, targetId);
+        if (inFirst) return inFirst;
+        const inSecond = findParentSplit(node.second, targetId);
+        if (inSecond) return inSecond;
+        return node;
+      }
+      return null;
+    }
+    const parent = findParentSplit(root, id);
+    if (parent) {
+      parent.direction = parent.direction === "horizontal" ? "vertical" : "horizontal";
+      bumpWsTreeVersion();
+      requestAnimationFrame(() => saveTree(wsIdx));
+    }
+  }, [bumpWsTreeVersion, saveTree]);
+
+  const handleSwapWithDirection = useCallback((sourceId: string, targetId: string, zone: "left" | "right" | "top" | "bottom" | "center") => {
+    const wsIdx = useWorkspaceStore.getState().activeWorkspaceIdx;
+    let root = workspaceTrees.get(wsIdx);
+    if (!root) return;
+
+    type TN = import("./types").TreeNode;
+    type SN = import("./types").SplitNode;
+    type LN = import("./types").LeafNode;
+
+    function findLeaf(node: TN, id: string): LN | null {
+      if (node.type === "leaf") return node.id === id ? node : null;
+      return findLeaf(node.first, id) || findLeaf(node.second, id);
+    }
+
+    if (zone === "center") {
+      // Swap by exchanging nodes in their parent splits
+      function findParentAndSide(node: TN, id: string): { parent: SN; side: "first" | "second" } | null {
+        if (node.type === "leaf") return null;
+        const sp = node as SN;
+        if (sp.first.type === "leaf" && sp.first.id === id) return { parent: sp, side: "first" };
+        if (sp.second.type === "leaf" && sp.second.id === id) return { parent: sp, side: "second" };
+        return findParentAndSide(sp.first, id) || findParentAndSide(sp.second, id);
+      }
+      const pa = findParentAndSide(root, sourceId);
+      const pb = findParentAndSide(root, targetId);
+      if (pa && pb) {
+        const tmp = pa.parent[pa.side];
+        pa.parent[pa.side] = pb.parent[pb.side];
+        pb.parent[pb.side] = tmp;
+      }
+    } else {
+      const splitDir = (zone === "left" || zone === "right") ? "horizontal" : "vertical";
+      const isBeforeTarget = zone === "left" || zone === "top";
+
+      // Check if source and target are siblings in the same split
+      function findParentSplit(node: TN, id: string): SN | null {
+        if (node.type === "leaf") return null;
+        const sp = node as SN;
+        const containsId = (n: TN): boolean =>
+          n.type === "leaf" ? n.id === id : containsId(n.first) || containsId(n.second);
+        if (containsId(sp.first) || containsId(sp.second)) {
+          return findParentSplit(sp.first, id) || findParentSplit(sp.second, id) || sp;
+        }
+        return null;
+      }
+
+      const sourceParent = findParentSplit(root, sourceId);
+      const targetParent = findParentSplit(root, targetId);
+
+      // If siblings — just change direction and reorder
+      if (sourceParent && sourceParent === targetParent) {
+        sourceParent.direction = splitDir;
+        const sourceIsFirst = (sourceParent.first.type === "leaf" && sourceParent.first.id === sourceId) ||
+          (sourceParent.first.type !== "leaf" && findLeaf(sourceParent.first, sourceId));
+        if (isBeforeTarget && !sourceIsFirst) {
+          const tmp = sourceParent.first;
+          sourceParent.first = sourceParent.second;
+          sourceParent.second = tmp;
+        } else if (!isBeforeTarget && sourceIsFirst) {
+          const tmp = sourceParent.first;
+          sourceParent.first = sourceParent.second;
+          sourceParent.second = tmp;
+        }
+      } else {
+        // Different parents — restructure tree
+        const sourceLeaf = findLeaf(root, sourceId);
+        if (!sourceLeaf) return;
+        const sourceCopy: LN = { type: "leaf", id: sourceLeaf.id, _cwd: sourceLeaf._cwd, _command: sourceLeaf._command };
+
+        function removeLeaf(node: TN, id: string): TN | null {
+          if (node.type === "leaf") return null;
+          const sp = node as SN;
+          if (sp.first.type === "leaf" && sp.first.id === id) return sp.second;
+          if (sp.second.type === "leaf" && sp.second.id === id) return sp.first;
+          const nf = removeLeaf(sp.first, id);
+          if (nf) { sp.first = nf; return node; }
+          const ns = removeLeaf(sp.second, id);
+          if (ns) { sp.second = ns; return node; }
+          return null;
+        }
+
+        if (root.type === "leaf" && root.id === sourceId) return;
+
+        const newRoot = removeLeaf(root, sourceId);
+        if (!newRoot) return;
+        root = newRoot;
+        workspaceTrees.set(wsIdx, root);
+
+        function insertAtTarget(node: TN): boolean {
+          if (node.type === "leaf") return false;
+          const sp = node as SN;
+          for (const side of ["first", "second"] as const) {
+            if (sp[side].type === "leaf" && sp[side].id === targetId) {
+              const targetCopy: LN = { ...(sp[side] as LN) };
+              sp[side] = {
+                type: "split", direction: splitDir, ratio: 0.5,
+                first: isBeforeTarget ? sourceCopy : targetCopy,
+                second: isBeforeTarget ? targetCopy : sourceCopy,
+              };
+              return true;
+            }
+          }
+          return insertAtTarget(sp.first) || insertAtTarget(sp.second);
+        }
+
+        if (root.type === "leaf" && root.id === targetId) {
+          const targetCopy: LN = { ...root };
+          workspaceTrees.set(wsIdx, {
+            type: "split", direction: splitDir, ratio: 0.5,
+            first: isBeforeTarget ? sourceCopy : targetCopy,
+            second: isBeforeTarget ? targetCopy : sourceCopy,
+          });
+        } else {
+          insertAtTarget(root);
+        }
+      }
+    }
+
+    bumpWsTreeVersion();
+    requestAnimationFrame(() => {
+      getTerminalIdsForWorkspace(wsIdx).forEach((tid) => {
+        const ref = terminalRefs.get(tid);
+        if (ref) {
+          ref.fitAddon.fit();
+          resizeTerminal(tid, ref.term.cols, ref.term.rows).catch(() => {});
+        }
+      });
+      saveTree(wsIdx);
+    });
+  }, [bumpWsTreeVersion, saveTree]);
 
   const handleSplit = useCallback((id: string, direction: "horizontal" | "vertical") => {
     const wsIdx = useWorkspaceStore.getState().activeWorkspaceIdx;
@@ -168,6 +336,9 @@ export default function App() {
     const wsIdx = useWorkspaceStore.getState().activeWorkspaceIdx;
     const root = workspaceTrees.get(wsIdx);
     if (!root) return;
+    if (useTerminalStore.getState().zoomedTerminalId === id) {
+      useTerminalStore.getState().toggleZoom(id);
+    }
     killTerminal(id).catch(() => {});
     const newRoot = removePaneFromTree(root, id);
     if (newRoot) {
@@ -199,8 +370,8 @@ export default function App() {
       const id = (e as CustomEvent).detail;
       if (id) handleClose(id);
     };
-    window.addEventListener("terminalhub:close-pane", handler);
-    return () => window.removeEventListener("terminalhub:close-pane", handler);
+    window.addEventListener("agentworkspace:close-pane", handler);
+    return () => window.removeEventListener("agentworkspace:close-pane", handler);
   }, [handleClose]);
 
   const handleTreeUpdate = useCallback(() => {
@@ -230,8 +401,12 @@ export default function App() {
     setActiveView("workspace-editor");
   }, [saveTree, setActiveView]);
 
-  const handleWorkspaceSaved = useCallback(() => {
+  const handleWorkspaceSaved = useCallback((nameOnly?: boolean) => {
     setEditingWsIdx(null);
+    if (nameOnly) {
+      setActiveView("terminals");
+      return;
+    }
     const wsIdx = useWorkspaceStore.getState().activeWorkspaceIdx;
     killWorkspaceTerminals(wsIdx);
     ensureWorkspaceTree(wsIdx);
@@ -256,6 +431,24 @@ export default function App() {
     onNewWorkspace: handleNewWorkspace,
   }), [handleSplit, handleEditWorkspace, handleNewWorkspace]);
 
+  const zoomedTerminalId = useTerminalStore((st) => st.zoomedTerminalId);
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      if (zoomedTerminalId) {
+        const ref = terminalRefs.get(zoomedTerminalId);
+        if (ref) {
+          ref.fitAddon.fit();
+          resizeTerminal(zoomedTerminalId, ref.term.cols, ref.term.rows).catch(() => {});
+        }
+      } else {
+        terminalRefs.forEach((ref, id) => {
+          ref.fitAddon.fit();
+          resizeTerminal(id, ref.term.cols, ref.term.rows).catch(() => {});
+        });
+      }
+    });
+  }, [zoomedTerminalId]);
+
   useKeyboardShortcuts(shortcutActions);
   usePinchZoom();
 
@@ -267,8 +460,8 @@ export default function App() {
       useBrowserStore.getState().addTab(normalized);
       usePanelStore.getState().openExplorer("browser");
     };
-    window.addEventListener("terminalhub:open-url", handler);
-    return () => window.removeEventListener("terminalhub:open-url", handler);
+    window.addEventListener("agentworkspace:open-url", handler);
+    return () => window.removeEventListener("agentworkspace:open-url", handler);
   }, []);
 
   return (
@@ -301,6 +494,8 @@ export default function App() {
                     node={tree}
                     onSplit={handleSplit}
                     onClose={handleClose}
+                    onRotate={handleRotate}
+                    onSwapWithDirection={handleSwapWithDirection}
                     onTreeUpdate={handleTreeUpdate}
                   />
                 </div>

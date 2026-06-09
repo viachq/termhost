@@ -1,6 +1,6 @@
 {
-  "name": "TerminalHub",
-  "short_name": "TerminalHub",
+  "name": "Agent Workspace",
+  "short_name": "Agent Workspace",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0c0c0c",

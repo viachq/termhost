@@ -1,6 +1,5 @@
 export const FILE_ICON_SVG: Record<string, string> = {
   folder: `<svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3.5A1.5 1.5 0 012.5 2h2.764c.958 0 1.76.56 2.311 1.184C7.985 3.648 8.48 4 9 4h4.5A1.5 1.5 0 0115 5.5v7a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9z"/></svg>`,
-  folderOpen: `<svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3.5A1.5 1.5 0 012.5 2h2.764c.958 0 1.76.56 2.311 1.184C7.985 3.648 8.48 4 9 4h4.5A1.5 1.5 0 0115 5.5v.5H2.5A1.5 1.5 0 001 7.5v-4zM1 7.5A1.5 1.5 0 012.5 6h11A1.5 1.5 0 0115 7.5v5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-5z"/></svg>`,
   file: `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 0a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4.707A1 1 0 0013.707 4L10 .293A1 1 0 009.293 0H4zm5.5 1.5v2a1 1 0 001 1h2l-3-3z"/></svg>`,
   code: `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5.854 4.854a.5.5 0 10-.708-.708l-3.5 3.5a.5.5 0 000 .708l3.5 3.5a.5.5 0 00.708-.708L2.707 8l3.147-3.146zm4.292 0a.5.5 0 01.708-.708l3.5 3.5a.5.5 0 010 .708l-3.5 3.5a.5.5 0 01-.708-.708L13.293 8l-3.147-3.146z"/></svg>`,
   config: `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 4.754a3.246 3.246 0 100 6.492 3.246 3.246 0 000-6.492zM6.754 8a1.246 1.246 0 112.492 0 1.246 1.246 0 01-2.492 0z"/><path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 01-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 01-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 01.52 1.255l-.16.292c-.892 1.64.902 3.434 2.541 2.54l.292-.159a.873.873 0 011.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 011.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 01.52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 01-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 01-1.255-.52l-.094-.319z"/></svg>`,
@@ -11,40 +10,128 @@ export const FILE_ICON_SVG: Record<string, string> = {
   db: `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3.904 1.777C4.978 1.289 6.427 1 8 1s3.022.289 4.096.777C13.168 2.265 14 2.936 14 3.75v8.5c0 .814-.832 1.485-1.904 1.973C11.022 14.711 9.573 15 8 15s-3.022-.289-4.096-.777C2.832 13.735 2 13.064 2 12.25v-8.5c0-.814.832-1.485 1.904-1.973z"/></svg>`,
   up: `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M15 2a1 1 0 00-1-1H2a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V2zM0 2a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H2a2 2 0 01-2-2V2zm4.5 5.5a.5.5 0 000 1h5.793l-2.147 2.146a.5.5 0 00.708.708l3-3a.5.5 0 000-.708l-3-3a.5.5 0 10-.708.708L10.293 7.5H4.5z" transform="rotate(-90 8 8)"/></svg>`,
   shell: `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M6 9a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3A.5.5 0 016 9zM3.854 4.146a.5.5 0 10-.708.708L5.293 7l-2.147 2.146a.5.5 0 00.708.708l2.5-2.5a.5.5 0 000-.708l-2.5-2.5z"/><path d="M2 1a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V3a2 2 0 00-2-2H2z"/></svg>`,
+  react: `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="1.5"/><ellipse cx="8" cy="8" rx="7" ry="2.8" fill="none" stroke="currentColor" stroke-width="1"/><ellipse cx="8" cy="8" rx="7" ry="2.8" fill="none" stroke="currentColor" stroke-width="1" transform="rotate(60 8 8)"/><ellipse cx="8" cy="8" rx="7" ry="2.8" fill="none" stroke="currentColor" stroke-width="1" transform="rotate(120 8 8)"/></svg>`,
+  rust: `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a.75.75 0 01.75.75v1a.75.75 0 01-1.5 0v-1A.75.75 0 018 1.5zm0 10.5a.75.75 0 01.75.75v1a.75.75 0 01-1.5 0v-1A.75.75 0 018 12zm6.5-4a.75.75 0 01-.75.75h-1a.75.75 0 010-1.5h1a.75.75 0 01.75.75zm-10.5 0a.75.75 0 01-.75.75h-1a.75.75 0 010-1.5h1A.75.75 0 014 8zm8.485-4.485a.75.75 0 010 1.06l-.707.708a.75.75 0 01-1.06-1.061l.707-.707a.75.75 0 011.06 0zM5.282 10.718a.75.75 0 010 1.06l-.707.707a.75.75 0 01-1.06-1.06l.707-.707a.75.75 0 011.06 0zm7.203 1.767a.75.75 0 01-1.06 0l-.708-.707a.75.75 0 111.061-1.06l.707.707a.75.75 0 010 1.06zM5.282 5.282a.75.75 0 01-1.06 0l-.707-.707a.75.75 0 011.06-1.06l.707.707a.75.75 0 010 1.06zM8 5a3 3 0 100 6 3 3 0 000-6z"/></svg>`,
+  python: `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M7.916 0C4.98 0 4.5 1.27 4.5 2.5v1.875h3.5v.625H2.625C1.29 5 0 5.98 0 8s1.29 3 2.625 3H4v-1.875C4 7.77 5.27 7 6.5 7h3c1.1 0 2-.77 2-1.875V2.5C11.5 1.27 10.852 0 7.916 0zM5.75 1.25a.75.75 0 110 1.5.75.75 0 010-1.5z"/><path d="M8.084 16c2.936 0 3.416-1.27 3.416-2.5v-1.875h-3.5V11h5.375C14.71 11 16 10.02 16 8s-1.29-3-2.625-3H12v1.875C12 8.23 10.73 9 9.5 9h-3c-1.1 0-2 .77-2 1.875v2.625C4.5 14.73 5.148 16 8.084 16zm2.166-1.25a.75.75 0 110-1.5.75.75 0 010 1.5z"/></svg>`,
+  git: `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M15.698 7.287L8.712.302a1.03 1.03 0 00-1.457 0l-1.45 1.45 1.84 1.84a1.223 1.223 0 011.55 1.56l1.773 1.774a1.224 1.224 0 11-.733.693L8.535 5.92v4.2a1.224 1.224 0 11-1.008-.037V5.836a1.224 1.224 0 01-.664-1.606L5.093 2.46.302 7.253a1.03 1.03 0 000 1.457l6.986 6.986a1.03 1.03 0 001.457 0l6.953-6.953a1.031 1.031 0 000-1.456z"/></svg>`,
+  font: `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2.5A1.5 1.5 0 014.5 1h7A1.5 1.5 0 0113 2.5v2h-1v-2a.5.5 0 00-.5-.5H8.5v11h1.5a.5.5 0 010 1h-4a.5.5 0 010-1H7.5V2h-3a.5.5 0 00-.5.5v2H3v-2z"/></svg>`,
+  video: `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H1a1 1 0 01-1-1V1zm4 0v6h8V1H4zm8 8H4v6h8V9zM1 1v2h2V1H1zm2 3H1v2h2V4zM1 7v2h2V7H1zm2 3H1v2h2v-2zm-2 3v2h2v-2H1zM15 1h-2v2h2V1zm-2 3v2h2V4h-2zm2 3h-2v2h2V7zm-2 3v2h2v-2h-2zm2 3h-2v2h2v-2z"/></svg>`,
+  pdf: `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 0a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4.707A1 1 0 0013.707 4L10 .293A1 1 0 009.293 0H4zm5.5 1.5v2a1 1 0 001 1h2l-3-3zM4.5 8a.5.5 0 000 1h7a.5.5 0 000-1h-7zm0 2a.5.5 0 000 1h7a.5.5 0 000-1h-7zm0 2a.5.5 0 000 1h4a.5.5 0 000-1h-4z"/></svg>`,
+  key: `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M0 8a4 4 0 017.465-2H14a.5.5 0 01.354.146l1.5 1.5a.5.5 0 010 .708l-1.5 1.5a.5.5 0 01-.708 0L13 9.207l-.646.647a.5.5 0 01-.708 0L11 9.207l-.646.647a.5.5 0 01-.708 0L9 9.207l-.646.647A.5.5 0 018 10h-.535A4 4 0 010 8zm4-1a1 1 0 100 2 1 1 0 000-2z"/></svg>`,
 };
 
 export const FILE_EXT_ICON: Record<string, string> = {
-  js: "code", mjs: "code", cjs: "code", jsx: "code", ts: "code", tsx: "code",
-  rs: "code", py: "code", go: "code", java: "code", cs: "code", cpp: "code", c: "code", h: "code",
-  html: "code", htm: "code", css: "code", scss: "code", less: "code", xml: "code", csv: "code",
-  sh: "shell", bash: "shell", ps1: "shell", bat: "shell", cmd: "shell",
+  js: "code", mjs: "code", cjs: "code",
+  jsx: "react", tsx: "react",
+  ts: "code",
+  rs: "rust",
+  py: "python",
+  go: "code", java: "code", cs: "code", cpp: "code", c: "code", h: "code",
+  rb: "code", php: "code", swift: "code", kt: "code", scala: "code", lua: "code",
+  html: "code", htm: "code", css: "code", scss: "code", less: "code", xml: "code", vue: "code", svelte: "code",
+  sh: "shell", bash: "shell", zsh: "shell", fish: "shell", ps1: "shell", bat: "shell", cmd: "shell",
   json: "config", toml: "config", yaml: "config", yml: "config", ini: "config", env: "config",
-  md: "md", markdown: "md", txt: "file", log: "file",
-  png: "image", jpg: "image", jpeg: "image", gif: "image", svg: "image", ico: "image", webp: "image",
-  exe: "file", dll: "file", msi: "file",
-  zip: "archive", rar: "archive", "7z": "archive", tar: "archive", gz: "archive",
+  conf: "config", cfg: "config", editorconfig: "config",
+  md: "md", markdown: "md", mdx: "md", txt: "file", log: "file", csv: "file",
+  png: "image", jpg: "image", jpeg: "image", gif: "image", svg: "image", ico: "image", webp: "image", bmp: "image", avif: "image",
+  mp4: "video", mkv: "video", avi: "video", mov: "video", webm: "video",
+  mp3: "video", wav: "video", ogg: "video", flac: "video",
+  pdf: "pdf", doc: "pdf", docx: "pdf", xls: "pdf", xlsx: "pdf", ppt: "pdf", pptx: "pdf",
+  exe: "file", dll: "file", msi: "file", bin: "file",
+  zip: "archive", rar: "archive", "7z": "archive", tar: "archive", gz: "archive", bz2: "archive", xz: "archive",
   lock: "lock",
   sql: "db", db: "db", sqlite: "db",
+  ttf: "font", otf: "font", woff: "font", woff2: "font", eot: "font",
+  pem: "key", crt: "key", cer: "key", p12: "key", pfx: "key",
+  gitignore: "git", gitattributes: "git", gitmodules: "git",
 };
 
 export const FILE_EXT_COLOR: Record<string, string> = {
-  js: "#e8d44d", mjs: "#e8d44d", cjs: "#e8d44d", jsx: "#61dafb",
-  ts: "#3178c6", tsx: "#3178c6",
+  js: "#e8d44d", mjs: "#e8d44d", cjs: "#e8d44d",
+  jsx: "#61dafb", tsx: "#61dafb",
+  ts: "#3178c6",
   json: "#a8b653", toml: "#9c4221", yaml: "#cb171e", yml: "#cb171e",
-  md: "#519aba", markdown: "#519aba",
-  html: "#e34f26", htm: "#e34f26", css: "#563d7c", scss: "#c6538c",
+  md: "#519aba", markdown: "#519aba", mdx: "#519aba",
+  html: "#e34f26", htm: "#e34f26", css: "#563d7c", scss: "#c6538c", less: "#1d365d",
+  vue: "#42b883", svelte: "#ff3e00",
   rs: "#dea584", py: "#3572a5", go: "#00add8", java: "#b07219",
-  sh: "#89e051", ps1: "#012456",
-  png: "#a074c4", jpg: "#a074c4", svg: "#a074c4",
-  lock: "#555", gitignore: "#f05033",
-  sql: "#e38c00", db: "#e38c00",
-  zip: "#e38c00", tar: "#e38c00",
+  rb: "#cc342d", php: "#4f5d95", swift: "#f05138", kt: "#a97bff",
+  cs: "#68217a", cpp: "#f34b7d", c: "#555555", h: "#555555",
+  sh: "#89e051", bash: "#89e051", ps1: "#012456",
+  png: "#a074c4", jpg: "#a074c4", jpeg: "#a074c4", svg: "#e6a817", gif: "#a074c4", webp: "#a074c4", ico: "#a074c4",
+  mp4: "#f25022", mkv: "#f25022", avi: "#f25022",
+  mp3: "#1db954", wav: "#1db954", flac: "#1db954",
+  pdf: "#e44332", doc: "#295394", docx: "#295394", xls: "#1d6f42", xlsx: "#1d6f42", ppt: "#d04423", pptx: "#d04423",
+  lock: "#555",
+  gitignore: "#f05033", gitattributes: "#f05033",
+  sql: "#e38c00", db: "#e38c00", sqlite: "#e38c00",
+  zip: "#e38c00", tar: "#e38c00", "7z": "#e38c00", rar: "#e38c00",
+  ttf: "#e48632", otf: "#e48632", woff: "#e48632", woff2: "#e48632",
+  env: "#ecd53f",
+  dockerfile: "#2496ed",
+  pem: "#c9510c", crt: "#c9510c",
+};
+
+const FOLDER_COLORS: Record<string, string> = {
+  src: "#42a5f5",
+  lib: "#42a5f5",
+  app: "#42a5f5",
+  source: "#42a5f5",
+  components: "#7e57c2",
+  pages: "#7e57c2",
+  views: "#7e57c2",
+  layouts: "#7e57c2",
+  hooks: "#ab47bc",
+  utils: "#ab47bc",
+  helpers: "#ab47bc",
+  store: "#ff7043",
+  stores: "#ff7043",
+  state: "#ff7043",
+  styles: "#ec407a",
+  css: "#ec407a",
+  assets: "#66bb6a",
+  images: "#66bb6a",
+  icons: "#66bb6a",
+  static: "#66bb6a",
+  public: "#66bb6a",
+  fonts: "#66bb6a",
+  dist: "#78909c",
+  build: "#78909c",
+  out: "#78909c",
+  target: "#78909c",
+  node_modules: "#78909c",
+  config: "#ffa726",
+  configs: "#ffa726",
+  scripts: "#26c6da",
+  test: "#ef5350",
+  tests: "#ef5350",
+  __tests__: "#ef5350",
+  spec: "#ef5350",
+  docs: "#29b6f6",
+  doc: "#29b6f6",
+  ".git": "#f05033",
+  ".github": "#f05033",
+  ".vscode": "#0078d7",
+  ".config": "#ffa726",
+  ".ssh": "#c9510c",
+  ".docker": "#2496ed",
+  ".aws": "#ff9900",
+  ".azure": "#0078d4",
+  ".kube": "#326ce5",
+  ".cargo": "#dea584",
+  ".rustup": "#dea584",
 };
 
 export function getFileIcon(name: string, isDir: boolean): { svg: string; color: string } {
-  if (isDir) return { svg: FILE_ICON_SVG.folder, color: "#8a8a8a" };
-  const ext = name.split(".").pop()?.toLowerCase() || "";
-  const iconKey = FILE_EXT_ICON[ext] || "file";
-  const color = FILE_EXT_COLOR[ext] || "#6a6a6a";
+  if (isDir) {
+    const lower = name.toLowerCase();
+    const color = FOLDER_COLORS[lower] || "#8a8a8a";
+    return { svg: FILE_ICON_SVG.folder, color };
+  }
+  const lower = name.toLowerCase();
+  const dotless = lower.replace(/^\./, "");
+  const ext = lower.split(".").pop() || "";
+  const iconKey = FILE_EXT_ICON[dotless] || FILE_EXT_ICON[ext] || "file";
+  const color = FILE_EXT_COLOR[dotless] || FILE_EXT_COLOR[ext] || "#6a6a6a";
   return { svg: FILE_ICON_SVG[iconKey] || FILE_ICON_SVG.file, color };
 }

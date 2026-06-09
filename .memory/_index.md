@@ -4,9 +4,10 @@
 
 ## architecture/
 
-- [overview.md](architecture/overview.md) — what TerminalHub is, entry points, build commands
-- [tech-stack.md](architecture/tech-stack.md) — Tauri + React + TypeScript + Zustand + CSS Modules
-- [split-tree-layout.md](architecture/split-tree-layout.md) — binary tree pane layout, focus nav, resize
+- [overview.md](architecture/overview.md) — Agent Workspace: Tauri 2 + React terminal multiplexer with sidecar daemon
+- [daemon-architecture.md](architecture/daemon-architecture.md) — sidecar PTY daemon, named pipe IPC, reconnect flow, Cargo workspace
+- [tech-stack.md](architecture/tech-stack.md) — Tauri 2 + React + TypeScript + Zustand + CSS Modules
+- [split-tree-layout.md](architecture/split-tree-layout.md) — binary tree pane layout, zoom/maximize, focus nav, resize
 
 ## decisions/
 
@@ -15,8 +16,8 @@
 
 ## patterns/
 
-- [state-management.md](patterns/state-management.md) — 7 Zustand stores, localStorage keys, backend state
-- [tauri-ipc.md](patterns/tauri-ipc.md) — invoke/emit pattern, event naming
+- [state-management.md](patterns/state-management.md) — Zustand stores, localStorage keys, daemon state
+- [tauri-ipc.md](patterns/tauri-ipc.md) — invoke/emit pattern, daemon proxy, DaemonIndicator, CloseDialog
 
 ## gotchas/
 

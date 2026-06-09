@@ -58,7 +58,8 @@ interface WorkspaceState {
   saveCurrentSplitTree: (
     splitRoot: TreeNode | null,
     terminalOrder: string[],
-    refs: Map<string, TerminalRef>
+    refs: Map<string, TerminalRef>,
+    targetWsIdx?: number
   ) => void;
 }
 
@@ -70,7 +71,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setHomeDir: (homeDir) => set({ homeDir }),
 
   loadWorkspaces: () => {
-    const raw = localStorage.getItem("terminalhub-workspaces-v2");
+    const raw = localStorage.getItem("agentworkspace-workspaces-v2");
     let workspaces: Workspace[];
     if (raw) {
       try {
@@ -82,12 +83,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       workspaces = [];
     }
     if (workspaces.length === 0) {
-      workspaces = [
-        { name: "Main", color: 0, panes: [{ cwd: "", command: "" }] },
-        { name: "Dev", color: 2, panes: [{ cwd: "", command: "" }] },
-      ];
+      workspaces = [];
     }
-    const savedIdx = parseInt(localStorage.getItem("terminalhub-active-ws") || "0");
+    const savedIdx = parseInt(localStorage.getItem("agentworkspace-active-ws") || "0");
     const activeWorkspaceIdx = savedIdx >= 0 && savedIdx < workspaces.length ? savedIdx : 0;
     set({ workspaces, activeWorkspaceIdx });
 
@@ -101,8 +99,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   saveWorkspaces: () => {
     const { workspaces, activeWorkspaceIdx } = get();
-    localStorage.setItem("terminalhub-workspaces-v2", JSON.stringify(workspaces));
-    localStorage.setItem("terminalhub-active-ws", String(activeWorkspaceIdx));
+    localStorage.setItem("agentworkspace-workspaces-v2", JSON.stringify(workspaces));
+    localStorage.setItem("agentworkspace-active-ws", String(activeWorkspaceIdx));
 
     const wsData = workspaces.map((ws, i) => ({
       name: ws.name,
@@ -139,7 +137,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   setActiveWorkspaceIdx: (idx) => {
     set({ activeWorkspaceIdx: idx });
-    localStorage.setItem("terminalhub-active-ws", String(idx));
+    localStorage.setItem("agentworkspace-active-ws", String(idx));
     const { workspaces } = get();
     const wsData = workspaces.map((ws, i) => ({
       name: ws.name,
@@ -154,14 +152,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     return workspaces[activeWorkspaceIdx];
   },
 
-  saveCurrentSplitTree: (splitRoot, _terminalOrder, refs) => {
+  saveCurrentSplitTree: (splitRoot, _terminalOrder, refs, targetWsIdx) => {
     const { activeWorkspaceIdx, workspaces } = get();
-    const ws = workspaces[activeWorkspaceIdx];
+    const idx = targetWsIdx ?? activeWorkspaceIdx;
+    const ws = workspaces[idx];
     if (!ws) return;
     const serialized = serializeTree(splitRoot, refs);
     const panes = treeToPanes(serialized);
     const updated = [...workspaces];
-    updated[activeWorkspaceIdx] = { ...ws, splitTree: serialized, panes };
+    updated[idx] = { ...ws, splitTree: serialized, panes };
     set({ workspaces: updated });
     get().saveWorkspaces();
   },

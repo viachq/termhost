@@ -1,28 +1,19 @@
-[workspace]
-members = [".", "crates/daemon", "crates/shared"]
-exclude = ["crates/app"]
-resolver = "2"
-
-[workspace.package]
-version = "0.1.0"
-edition = "2021"
-
 [package]
-name = "terminal-hub"
+name = "agent-workspace"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "terminal_hub_lib"
+name = "agent_workspace_lib"
 path = "crates/app/src/lib.rs"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "terminal-hub"
+name = "agent-workspace"
 path = "crates/app/src/main.rs"
 
 [dependencies]
-terminalhub-shared = { path = "crates/shared" }
+agent-workspace-shared = { path = "../shared" }
 tauri = { version = "2", features = ["protocol-asset", "unstable", "tray-icon", "image-ico"] }
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
@@ -31,6 +22,9 @@ dirs = "6"
 url = "2"
 tauri-utils = "2"
 tokio = { version = "1", features = ["sync", "net", "rt", "io-util", "time"] }
+webview2-com = "0.38"
+windows = { version = "0.61", features = ["Win32_Foundation"] }
+windows-core = "0.61"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

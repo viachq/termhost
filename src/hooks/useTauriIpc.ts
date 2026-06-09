@@ -41,6 +41,14 @@ export async function readFile(path: string): Promise<string> {
   return invoke("read_file", { path });
 }
 
+export async function readFileBytes(path: string): Promise<number[]> {
+  return invoke("read_file_bytes", { path });
+}
+
+export async function writeFile(path: string, contents: string): Promise<void> {
+  return invoke("write_file", { path, contents });
+}
+
 export async function getHomeDir(): Promise<string> {
   return invoke("get_home_dir");
 }

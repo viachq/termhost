@@ -1,14 +1,29 @@
-import { useCallback, useRef, useEffect } from "react";
+import { useCallback, useRef, useEffect, type ReactNode } from "react";
 import { usePanelStore, type ExplorerTab } from "../../store/panelStore";
 import { useFileViewerStore } from "../../store/fileViewerStore";
 import { browserHide } from "../../hooks/useTauriIpc";
 import FilesContent from "./FilesContent";
 import BrowserPanel from "./BrowserPanel";
 import TranslatePanel from "./TranslatePanel";
+import McpPanel from "./McpPanel";
 import SettingsPanel from "./SettingsPanel";
+import SshPanel from "./SshPanel";
 import FileViewer from "../fileviewer/FileViewer";
 import NoteGraph from "../graph/NoteGraph";
 import s from "./Panels.module.css";
+
+function renderTabContent(tab: ExplorerTab): ReactNode {
+  switch (tab) {
+    case "files": return <FilesContent />;
+    case "preview": return <FileViewer />;
+    case "browser": return <BrowserPanel embedded />;
+    case "graph": return <NoteGraph embedded />;
+    case "translate": return <TranslatePanel embedded />;
+    case "ssh": return <SshPanel embedded />;
+    case "mcp": return <McpPanel embedded />;
+    case "settings": return <SettingsPanel embedded />;
+  }
+}
 
 const TABS: { key: ExplorerTab; label: string; icon: string }[] = [
   {
@@ -37,6 +52,16 @@ const TABS: { key: ExplorerTab; label: string; icon: string }[] = [
     icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h7M9 3v2M6 5c.6 3.5 2.7 6.5 5 8.5M7 15l4-4"/><path d="M13.5 9l4.5 12M15.7 15h4.6"/></svg>',
   },
   {
+    key: "ssh",
+    label: "SSH",
+    icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="3"/><path d="M7 8l3 3-3 3M12 16h5"/></svg>',
+  },
+  {
+    key: "mcp",
+    label: "MCP",
+    icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><path d="M14 14h8v8h-8z" opacity="0.5"/><circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="18" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="6" cy="18" r="1.5" fill="currentColor" stroke="none"/></svg>',
+  },
+  {
     key: "settings",
     label: "Settings",
     icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
@@ -45,12 +70,19 @@ const TABS: { key: ExplorerTab; label: string; icon: string }[] = [
 
 export default function ExplorerPanel() {
   const explorerTab = usePanelStore((st) => st.explorerTab);
+  const secondaryTab = usePanelStore((st) => st.secondaryTab);
+  const splitRatio = usePanelStore((st) => st.splitRatio);
   const explorerWidth = usePanelStore((st) => st.explorerWidth);
   const setExplorerWidth = usePanelStore((st) => st.setExplorerWidth);
   const openExplorer = usePanelStore((st) => st.openExplorer);
+  const openSecondary = usePanelStore((st) => st.openSecondary);
+  const closeSecondary = usePanelStore((st) => st.closeSecondary);
+  const setSplitRatio = usePanelStore((st) => st.setSplitRatio);
   const fileTabs = useFileViewerStore((st) => st.fileTabs);
   const dragRef = useRef(false);
+  const splitDragRef = useRef(false);
   const prevTabRef = useRef(explorerTab);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (prevTabRef.current === "browser" && explorerTab !== "browser") {
@@ -84,6 +116,46 @@ export default function ExplorerPanel() {
     document.addEventListener("mouseup", onUp);
   }, [setExplorerWidth]);
 
+  const handleSplitDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    splitDragRef.current = true;
+    const container = contentRef.current;
+    if (!container) return;
+
+    const onMove = (ev: MouseEvent) => {
+      if (!splitDragRef.current || !container) return;
+      const rect = container.getBoundingClientRect();
+      const ratio = Math.max(0.15, Math.min(0.85, (ev.clientX - rect.left) / rect.width));
+      setSplitRatio(ratio);
+    };
+    const onUp = () => {
+      splitDragRef.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [setSplitRatio]);
+
+  const handleTabClick = useCallback((key: ExplorerTab, e: React.MouseEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      if (key === explorerTab) return;
+      if (secondaryTab === key) {
+        closeSecondary();
+      } else {
+        openSecondary(key);
+      }
+    } else {
+      openExplorer(key);
+    }
+  }, [explorerTab, secondaryTab, openExplorer, openSecondary, closeSecondary]);
+
+  const isSplit = secondaryTab !== null;
+
   return (
     <div className={s.explorerPanel} style={{ width: explorerWidth }}>
       <div className={s.explorerResize} onMouseDown={handleResizeStart} />
@@ -91,9 +163,9 @@ export default function ExplorerPanel() {
         {TABS.map((t) => (
           <button
             key={t.key}
-            className={`${s.explorerTab} ${explorerTab === t.key ? s.explorerTabActive : ""}`}
-            onClick={() => openExplorer(t.key)}
-            title={t.label}
+            className={`${s.explorerTab} ${explorerTab === t.key || secondaryTab === t.key ? s.explorerTabActive : ""}`}
+            onClick={(e) => handleTabClick(t.key, e)}
+            title={`${t.label} (Ctrl+click to split)`}
           >
             <span dangerouslySetInnerHTML={{ __html: t.icon }} />
             <span className={s.explorerTabLabel}>{t.label}</span>
@@ -103,13 +175,20 @@ export default function ExplorerPanel() {
           </button>
         ))}
       </div>
-      <div className={s.explorerContent}>
-        {explorerTab === "files" && <FilesContent />}
-        {explorerTab === "preview" && <FileViewer />}
-        {explorerTab === "browser" && <BrowserPanel embedded />}
-        {explorerTab === "graph" && <NoteGraph embedded />}
-        {explorerTab === "translate" && <TranslatePanel embedded />}
-        {explorerTab === "settings" && <SettingsPanel embedded />}
+      <div className={s.explorerContent} ref={contentRef} style={isSplit ? { flexDirection: "row" } : undefined}>
+        {isSplit ? (
+          <>
+            <div className={s.explorerSplitPane} style={{ width: `calc(${splitRatio * 100}% - 2px)` }}>
+              {renderTabContent(explorerTab)}
+            </div>
+            <div className={s.explorerSplitDivider} onMouseDown={handleSplitDragStart} />
+            <div className={s.explorerSplitPane} style={{ width: `calc(${(1 - splitRatio) * 100}% - 2px)` }}>
+              {renderTabContent(secondaryTab)}
+            </div>
+          </>
+        ) : (
+          renderTabContent(explorerTab)
+        )}
       </div>
     </div>
   );

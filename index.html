@@ -5,6 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Agent Workspace</title>
   <style>html,body{background:#0c0c0c;margin:0;height:100%}</style>
+  <script>
+    // Block WebView2 built-in shortcuts BEFORE React loads.
+    // Only preventDefault() — xterm.js still receives the event and sends to shell.
+    // stopImmediatePropagation() is avoided so terminal keys work normally.
+    document.addEventListener('keydown', function(e) {
+      // F12 — DevTools
+      if (e.key === 'F12') { e.preventDefault(); return; }
+      var ctrl = e.ctrlKey || e.metaKey;
+      if (!ctrl) return;
+      var k = e.key.toLowerCase();
+      if (!e.shiftKey && !e.altKey) {
+        // Ctrl+R — reload (would reset entire app), Ctrl+P — print, Ctrl+U — view-source
+        if (k === 'r' || k === 'p' || k === 'u') { e.preventDefault(); return; }
+        // Ctrl+F — we handle this ourselves; early preventDefault prevents WebView2 find bar
+        if (k === 'f') { e.preventDefault(); return; }
+      }
+      // Ctrl+Shift+I / Ctrl+Shift+J / Ctrl+Shift+C — DevTools panels
+      if (e.shiftKey && !e.altKey && (k === 'i' || k === 'j' || k === 'c')) {
+        e.preventDefault();
+      }
+    }, true);
+  </script>
 </head>
 <body>
   <div id="root"></div>

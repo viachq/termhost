@@ -13,7 +13,8 @@ export type ServerMessage =
   | { type: "terminals"; data: TerminalInfo[] }
   | { type: "output"; id: string; data: string }
   | { type: "buffer"; id: string; data: string }
-  | { type: "workspaces"; data: WorkspaceInfo[]; activeIdx: number };
+  | { type: "workspaces"; data: WorkspaceInfo[]; activeIdx: number }
+  | { type: "clipboard_ok"; ok: boolean };
 
 export type ClientMessage =
   | { type: "input"; id: string; data: string }
@@ -22,4 +23,5 @@ export type ClientMessage =
   | { type: "list_workspaces" }
   | { type: "switch_workspace"; idx: number }
   | { type: "create_workspace"; name: string; color: number }
-  | { type: "delete_workspace"; idx: number };
+  | { type: "delete_workspace"; idx: number }
+  | { type: "clipboard"; data: string };

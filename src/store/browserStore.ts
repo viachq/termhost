@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-const HISTORY_KEY = "terminalhub-browser-history";
+const HISTORY_KEY = "agentworkspace-browser-history";
 
 export interface BrowserTab {
   id: string;

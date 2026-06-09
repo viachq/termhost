@@ -14,6 +14,12 @@ interface ShortcutActions {
 export function useKeyboardShortcuts(actions: ShortcutActions) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Escape — exit rearrange mode
+      if (e.key === "Escape" && useTerminalStore.getState().rearrangeMode) {
+        e.preventDefault();
+        useTerminalStore.getState().toggleRearrangeMode();
+        return;
+      }
       // F11 — toggle fullscreen (no modifier needed)
       if (e.key === "F11") {
         e.preventDefault();
@@ -27,6 +33,17 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
 
       const key = e.key.toLowerCase();
 
+      // Ctrl+F — open our terminal search (stopImmediatePropagation prevents it reaching xterm)
+      if (key === "f" && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const focusedId = useTerminalStore.getState().focusedTerminalId;
+        if (focusedId) {
+          window.dispatchEvent(new CustomEvent("agentworkspace:terminal-search", { detail: focusedId }));
+        }
+        return;
+      }
+
       // Ctrl+Shift+H — split horizontal
       if (key === "h" && e.shiftKey) {
         e.preventDefault();
@@ -39,11 +56,36 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
         actions.onSplitV();
         return;
       }
+      // Ctrl+Shift+R — rearrange mode
+      if (key === "r" && e.shiftKey) {
+        e.preventDefault();
+        useTerminalStore.getState().toggleRearrangeMode();
+        return;
+      }
+      // Ctrl+Shift+M — toggle zoom
+      if (key === "m" && e.shiftKey) {
+        e.preventDefault();
+        const focusedId = useTerminalStore.getState().focusedTerminalId;
+        if (focusedId) useTerminalStore.getState().toggleZoom(focusedId);
+        return;
+      }
       // Ctrl+Alt+Arrow — navigate focus
       if (e.altKey && key.startsWith("arrow")) {
         e.preventDefault();
         navigateFocus(key.replace("arrow", "").toLowerCase() as "left" | "right" | "up" | "down");
         return;
+      }
+      // Ctrl+Up/Down — navigate between commands (OSC 133 marks)
+      if (!e.altKey && !e.shiftKey && (key === "arrowup" || key === "arrowdown")) {
+        const focusedId = useTerminalStore.getState().focusedTerminalId;
+        if (focusedId) {
+          const ref = terminalRefs.get(focusedId);
+          if (ref && ref.commandMarks.length > 0) {
+            e.preventDefault();
+            navigateCommands(ref, key === "arrowup" ? "up" : "down");
+            return;
+          }
+        }
       }
       // Ctrl+T — edit workspace
       if (key === "t" && !e.shiftKey) {
@@ -67,7 +109,7 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
           const focusedId = useTerminalStore.getState().focusedTerminalId;
           if (focusedId) {
             // Close will be handled by App — dispatch via custom event
-            window.dispatchEvent(new CustomEvent("terminalhub:close-pane", { detail: focusedId }));
+            window.dispatchEvent(new CustomEvent("agentworkspace:close-pane", { detail: focusedId }));
           }
         }
         return;
@@ -205,5 +247,34 @@ function navigateFocus(direction: "left" | "right" | "up" | "down") {
   if (bestId) {
     setFocusedTerminalId(bestId);
     terminalRefs.get(bestId)?.term.focus();
+  }
+}
+
+function navigateCommands(ref: import("../types").TerminalRef, direction: "up" | "down") {
+  const { term, commandMarks } = ref;
+  if (commandMarks.length === 0) return;
+
+  const viewportY = term.buffer.active.viewportY;
+  const baseY = term.buffer.active.baseY;
+
+  if (direction === "up") {
+    for (let i = commandMarks.length - 1; i >= 0; i--) {
+      const markViewport = commandMarks[i] - baseY;
+      if (markViewport < viewportY - 1) {
+        term.scrollLines(markViewport - viewportY);
+        return;
+      }
+    }
+    // Already above all marks — go to first
+    term.scrollLines((commandMarks[0] - baseY) - viewportY);
+  } else {
+    for (let i = 0; i < commandMarks.length; i++) {
+      const markViewport = commandMarks[i] - baseY;
+      if (markViewport > viewportY + 1) {
+        term.scrollLines(markViewport - viewportY);
+        return;
+      }
+    }
+    term.scrollToBottom();
   }
 }

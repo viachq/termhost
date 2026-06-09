@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="rounded">
+      <rect width="1024" height="1024" rx="220" ry="220"/>
+    </clipPath>
+    <radialGradient id="bgGlow" cx="50%" cy="55%" r="60%">
+      <stop offset="0%" stop-color="#1a0a12"/>
+      <stop offset="100%" stop-color="#060608"/>
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="16" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff6b8a"/>
+      <stop offset="100%" stop-color="#e94560"/>
+    </linearGradient>
+    <linearGradient id="frameGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2a2a2a"/>
+      <stop offset="100%" stop-color="#1a1a1a"/>
+    </linearGradient>
+  </defs>
+  <g clip-path="url(#rounded)">
+    <!-- Background with subtle glow -->
+    <rect width="1024" height="1024" fill="url(#bgGlow)"/>
+
+    <!-- Ambient accent glow behind terminal -->
+    <ellipse cx="512" cy="540" rx="300" ry="260" fill="#e94560" opacity="0.06"/>
+
+    <!-- Terminal window -->
+    <rect x="220" y="280" width="584" height="480" rx="28" fill="#0e0e10" stroke="url(#frameGrad)" stroke-width="3"/>
+
+    <!-- Title bar -->
+    <rect x="220" y="280" width="584" height="56" rx="28" fill="#141416"/>
+    <rect x="220" y="308" width="584" height="28" fill="#141416"/>
+
+    <!-- Glowing dots -->
+    <circle cx="268" cy="308" r="10" fill="#e94560" filter="url(#glow)"/>
+    <circle cx="300" cy="308" r="10" fill="#f59e0b" filter="url(#glow)"/>
+    <circle cx="332" cy="308" r="10" fill="#22c55e" filter="url(#glow)"/>
+
+    <!-- Divider -->
+    <line x1="220" y1="336" x2="804" y2="336" stroke="#1e1e22" stroke-width="2"/>
+
+    <!-- Prompt symbol with glow -->
+    <text x="268" y="400" font-family="monospace" font-size="44" fill="url(#accentGrad)" font-weight="bold" filter="url(#glow)">❯</text>
+
+    <!-- Typed text -->
+    <rect x="312" y="376" width="200" height="30" rx="6" fill="#e94560" opacity="0.15"/>
+    <rect x="312" y="376" width="200" height="30" rx="6" fill="none" stroke="#e94560" stroke-width="1" opacity="0.3"/>
+
+    <!-- Cursor with neon glow -->
+    <rect x="520" y="374" width="20" height="34" rx="3" fill="#e94560" filter="url(#softGlow)"/>
+
+    <!-- Output lines with varying opacity -->
+    <rect x="268" y="430" width="260" height="18" rx="4" fill="#e94560" opacity="0.08"/>
+    <rect x="268" y="460" width="180" height="18" rx="4" fill="#e94560" opacity="0.06"/>
+    <rect x="268" y="490" width="320" height="18" rx="4" fill="#e94560" opacity="0.04"/>
+
+    <!-- Second prompt -->
+    <text x="268" y="560" font-family="monospace" font-size="44" fill="url(#accentGrad)" font-weight="bold" filter="url(#glow)">❯</text>
+
+    <!-- Split pane divider — vertical glowing line -->
+    <line x1="560" y1="370" x2="560" y2="720" stroke="#e94560" stroke-width="2" opacity="0.4" filter="url(#glow)"/>
+
+    <!-- Right pane content -->
+    <rect x="588" y="376" width="160" height="14" rx="3" fill="#22c55e" opacity="0.15"/>
+    <rect x="588" y="400" width="120" height="14" rx="3" fill="#ffffff" opacity="0.06"/>
+    <rect x="588" y="424" width="180" height="14" rx="3" fill="#ffffff" opacity="0.04"/>
+    <rect x="588" y="448" width="100" height="14" rx="3" fill="#f59e0b" opacity="0.1"/>
+    <rect x="588" y="472" width="150" height="14" rx="3" fill="#ffffff" opacity="0.04"/>
+
+    <!-- Bottom accent line -->
+    <line x1="280" y1="720" x2="744" y2="720" stroke="url(#accentGrad)" stroke-width="2" opacity="0.3"/>
+  </g>
+</svg>

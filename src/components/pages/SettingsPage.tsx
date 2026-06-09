@@ -59,19 +59,7 @@ export default function SettingsPage() {
       <div className={s.editor}>
         <h2>Settings</h2>
 
-        <label className={s.fieldLabel}>Appearance</label>
-        <div className={s.settingRow}>
-          <label>UI Theme</label>
-          <select
-            value={uiTheme}
-            onChange={(e) => setUiTheme(e.target.value as UiTheme)}
-          >
-            <option value="dark">Dark</option>
-            <option value="light">Light</option>
-          </select>
-        </div>
-
-        <label className={s.fieldLabel}>Terminal Colors</label>
+        <label className={s.fieldLabel}>Theme</label>
         <div className={s.themeCards}>
           {Object.entries(THEMES).map(([key, theme]) => (
             <div

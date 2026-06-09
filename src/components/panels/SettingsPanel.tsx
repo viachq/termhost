@@ -57,18 +57,7 @@ export default function SettingsPanel({ embedded }: { embedded?: boolean } = {})
   const body = (
     <>
       <div className={s.settingsSection}>
-        <p className={s.settingsLabel}>Appearance</p>
-        <div className={s.settingsRow}>
-          <label>Theme</label>
-          <select value={uiTheme} onChange={(e) => setUiTheme(e.target.value as UiTheme)}>
-            <option value="dark">Dark</option>
-            <option value="light">Light</option>
-          </select>
-        </div>
-      </div>
-
-      <div className={s.settingsSection}>
-        <p className={s.settingsLabel}>Terminal Colors</p>
+        <p className={s.settingsLabel}>Theme</p>
         <div className={s.settingsThemes}>
           {Object.entries(THEMES).map(([key, theme]) => (
             <div

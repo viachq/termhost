@@ -1,40 +1,48 @@
 ---
 updated: 2026-06-07
-tags: [architecture, overview, tauri, xterm]
-related: [[tech-stack], [split-tree-layout]]
+tags: [architecture, overview, tauri, xterm, daemon]
+related: [[tech-stack], [split-tree-layout], [daemon-architecture]]
 ---
 # Project Overview
 
-TerminalHub is a cross-platform terminal multiplexer/workspace manager. Users can manage multiple terminal workspaces with split pane layouts, run terminals with different working directories and startup commands, edit/view files (Monaco + Markdown), and access terminals remotely via WebSocket on mobile.
+Agent Workspace (repo: agent-workspace, formerly TerminalHub) is a Windows terminal multiplexer/workspace manager. Users manage multiple terminal workspaces with split pane layouts, run terminals with different working directories and startup commands, zoom individual panes to full workspace, and access a built-in browser panel.
 
-Two implementations coexist in the repo — legacy C# WPF (MainWindow.xaml, Models/, Services/, Controls/) and active Tauri (src-tauri/ + src/). The Tauri version is the current active one; WPF is legacy/experimental.
+GitHub: https://github.com/viachq/agent-workspace
+
+Two implementations coexist — legacy C# WPF (MainWindow.xaml, Models/, Services/, Controls/) and active Tauri 2.x (src-tauri/ + src/). The Tauri version is the current active one.
+
+## Architecture
+
+- **Frontend**: React + xterm.js in Tauri WebView2
+- **Tauri app** (`crates/app/`): thin proxy, no PTY management — forwards all terminal commands to daemon via named pipe
+- **Daemon** (`crates/daemon/`): standalone `terminalhub-daemon.exe` owns all PTY processes, survives app restarts
+- **Shared** (`crates/shared/`): IPC protocol types shared between app and daemon
 
 ## Entry Points
 
 - **Frontend**: `index.html` → `src/main.tsx` → React `<App />`
-- **Backend**: `src-tauri/src/lib.rs::run()` (Tauri builder setup)
-- **Legacy WPF**: `MainWindow::OnLoaded()` (not actively developed)
+- **Tauri app**: `src-tauri/crates/app/src/lib.rs::run()` (Tauri builder, daemon connection)
+- **Daemon**: `src-tauri/crates/daemon/src/main.rs` (named pipe server, PTY manager)
 
 ## Key Directories
 
 ```
 src/main.tsx              ← React entry point
 src/App.tsx               ← layout shell, hooks, routing
-src/store/                ← 7 Zustand stores
-src/components/           ← React components (titlebar, sidebar, terminal, splitpane, panels, fileviewer, pages, search)
+src/store/                ← Zustand stores
+src/components/           ← React components
 src/hooks/                ← custom hooks (keyboard, zoom, drag, resize, split tree)
-src/constants/            ← themes, presets, file icons
-src/styles/               ← global.css, markdown.css
-src-tauri/src/lib.rs      ← Tauri commands, file ops, WS server mgmt
-src-tauri/src/pty_manager.rs  ← PTY process management
-src-tauri/src/ws_server.rs    ← WebSocket server for mobile
+src-tauri/Cargo.toml      ← workspace root AND Tauri package
+src-tauri/crates/app/     ← Tauri thin proxy (lib.rs, daemon_client.rs)
+src-tauri/crates/daemon/  ← standalone PTY daemon
+src-tauri/crates/shared/  ← IPC protocol (DaemonRequest/Response)
 ```
 
 ## Build & Dev
 
 ```bash
-npm run dev           # Tauri dev (vite:dev + Rust backend + window)
+npm run dev           # Tauri dev (vite + Rust backend + daemon)
 npm run build         # Tauri production build
-npm run vite:dev      # Frontend only (localhost:1420)
-npm run vite:build    # Frontend build to dist/
 ```
+
+Launch via desktop shortcut: `C:\Users\viach\Desktop\Agent Workspace.lnk` → `start-dev.bat` → `npm run dev`

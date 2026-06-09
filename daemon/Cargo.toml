@@ -1,0 +1,31 @@
+[package]
+name = "agent-workspace-daemon"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "agent-workspace-daemon"
+path = "src/main.rs"
+
+[dependencies]
+agent-workspace-shared = { path = "../shared" }
+portable-pty = "0.8"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+warp = "0.3"
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+dirs = "6"
+tray-icon = "0.19"
+image = { version = "0.25", default-features = false, features = ["ico"] }
+arboard = "3"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["namedpipeapi", "winbase", "handleapi", "winuser", "synchapi", "errhandlingapi"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"

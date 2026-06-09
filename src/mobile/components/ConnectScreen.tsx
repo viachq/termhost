@@ -35,7 +35,7 @@ export function ConnectScreen({ onConnect }: Props) {
 
   return (
     <div className="m-connect">
-      <div className="m-connect-logo">TerminalHub</div>
+      <div className="m-connect-logo">Agent Workspace</div>
       <p className="m-connect-desc">Enter your PC address</p>
       <div className="m-connect-row">
         <input

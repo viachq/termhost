@@ -9,12 +9,16 @@ interface TerminalState {
   splitRoot: TreeNode | null;
   terminalOrder: string[];
   focusedTerminalId: string | null;
+  zoomedTerminalId: string | null;
+  rearrangeMode: boolean;
   wsTreeVersion: number;
   titles: Record<string, string>;
 
   setSplitRoot: (root: TreeNode | null) => void;
   setTerminalOrder: (order: string[]) => void;
   setFocusedTerminalId: (id: string | null) => void;
+  toggleZoom: (id: string) => void;
+  toggleRearrangeMode: () => void;
   bumpWsTreeVersion: () => void;
   setTitle: (id: string, title: string) => void;
 }
@@ -34,6 +38,8 @@ export const useTerminalStore = create<TerminalState>((set) => ({
   splitRoot: null,
   terminalOrder: [],
   focusedTerminalId: null,
+  zoomedTerminalId: null,
+  rearrangeMode: false,
   wsTreeVersion: 0,
   titles: {},
 
@@ -44,6 +50,13 @@ export const useTerminalStore = create<TerminalState>((set) => ({
   setTerminalOrder: (terminalOrder) => set({ terminalOrder }),
 
   setFocusedTerminalId: (focusedTerminalId) => set({ focusedTerminalId }),
+
+  toggleZoom: (id) => set((s) => ({
+    zoomedTerminalId: s.zoomedTerminalId === id ? null : id,
+    focusedTerminalId: id,
+  })),
+
+  toggleRearrangeMode: () => set((s) => ({ rearrangeMode: !s.rearrangeMode })),
 
   bumpWsTreeVersion: () => set((s) => ({ wsTreeVersion: s.wsTreeVersion + 1 })),
 

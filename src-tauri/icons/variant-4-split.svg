@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="rounded">
+      <rect width="1024" height="1024" rx="220" ry="220"/>
+    </clipPath>
+    <linearGradient id="acGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff6b8a"/>
+      <stop offset="100%" stop-color="#e94560"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+  <g clip-path="url(#rounded)">
+    <!-- Background -->
+    <rect width="1024" height="1024" fill="#08080a"/>
+
+    <!-- Main terminal container -->
+    <rect x="160" y="200" width="704" height="624" rx="32" fill="#111114" filter="url(#shadow)"/>
+    <rect x="160" y="200" width="704" height="624" rx="32" fill="none" stroke="#222228" stroke-width="2"/>
+
+    <!-- Title bar -->
+    <circle cx="212" cy="244" r="11" fill="#e94560"/>
+    <circle cx="248" cy="244" r="11" fill="#f59e0b"/>
+    <circle cx="284" cy="244" r="11" fill="#22c55e"/>
+    <line x1="160" y1="272" x2="864" y2="272" stroke="#222228" stroke-width="2"/>
+
+    <!-- Split: vertical divider -->
+    <line x1="540" y1="272" x2="540" y2="824" stroke="url(#acGrad)" stroke-width="3" opacity="0.6"/>
+
+    <!-- Split: horizontal divider (left pane) -->
+    <line x1="160" y1="548" x2="540" y2="548" stroke="url(#acGrad)" stroke-width="3" opacity="0.4"/>
+
+    <!-- Pane 1 (top-left) — main terminal -->
+    <text x="204" y="328" font-family="monospace" font-size="38" fill="#e94560" font-weight="bold">❯</text>
+    <rect x="244" y="306" width="160" height="24" rx="4" fill="#e94560" opacity="0.12"/>
+    <rect x="412" y="306" width="16" height="28" rx="3" fill="#e94560" opacity="0.8"/>
+
+    <rect x="204" y="354" width="220" height="14" rx="3" fill="#2a2a2a"/>
+    <rect x="204" y="378" width="150" height="14" rx="3" fill="#2a2a2a"/>
+    <rect x="204" y="402" width="280" height="14" rx="3" fill="#2a2a2a"/>
+    <rect x="204" y="426" width="100" height="14" rx="3" fill="#2a2a2a"/>
+
+    <text x="204" y="500" font-family="monospace" font-size="38" fill="#e94560" font-weight="bold">❯</text>
+
+    <!-- Pane 2 (bottom-left) — secondary terminal -->
+    <text x="204" y="600" font-family="monospace" font-size="32" fill="#6a6a8a" font-weight="bold">❯</text>
+    <rect x="238" y="584" width="100" height="18" rx="3" fill="#1e1e24"/>
+    <rect x="204" y="620" width="180" height="12" rx="3" fill="#1a1a1e"/>
+    <rect x="204" y="642" width="120" height="12" rx="3" fill="#1a1a1e"/>
+
+    <!-- Pane 3 (right) — file explorer / logs -->
+    <rect x="572" y="294" width="180" height="18" rx="3" fill="#22c55e" opacity="0.12"/>
+    <text x="580" y="308" font-family="monospace" font-size="16" fill="#22c55e" opacity="0.6">src/</text>
+
+    <g opacity="0.35">
+      <rect x="588" y="330" width="140" height="14" rx="3" fill="#ffffff" opacity="0.12"/>
+      <rect x="588" y="354" width="200" height="14" rx="3" fill="#ffffff" opacity="0.08"/>
+      <rect x="588" y="378" width="160" height="14" rx="3" fill="#e94560" opacity="0.15"/>
+      <rect x="588" y="402" width="120" height="14" rx="3" fill="#ffffff" opacity="0.08"/>
+      <rect x="588" y="426" width="180" height="14" rx="3" fill="#ffffff" opacity="0.08"/>
+      <rect x="588" y="450" width="140" height="14" rx="3" fill="#ffffff" opacity="0.08"/>
+      <rect x="588" y="474" width="200" height="14" rx="3" fill="#ffffff" opacity="0.08"/>
+      <rect x="588" y="498" width="100" height="14" rx="3" fill="#f59e0b" opacity="0.12"/>
+      <rect x="588" y="522" width="170" height="14" rx="3" fill="#ffffff" opacity="0.08"/>
+      <rect x="588" y="546" width="130" height="14" rx="3" fill="#ffffff" opacity="0.08"/>
+    </g>
+
+    <!-- Workspace tabs at the very bottom -->
+    <g transform="translate(160, 780)">
+      <rect x="0" y="0" width="704" height="44" rx="0" fill="#0c0c0e"/>
+      <line x1="0" y1="0" x2="704" y2="0" stroke="#222228" stroke-width="1"/>
+      <!-- Active tab -->
+      <rect x="16" y="8" width="80" height="28" rx="6" fill="#e94560" opacity="0.15"/>
+      <line x1="16" y1="36" x2="96" y2="36" stroke="#e94560" stroke-width="2"/>
+      <!-- Inactive tabs -->
+      <rect x="108" y="8" width="64" height="28" rx="6" fill="#1a1a1e"/>
+      <rect x="184" y="8" width="64" height="28" rx="6" fill="#1a1a1e"/>
+    </g>
+  </g>
+</svg>
