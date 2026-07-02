@@ -1,0 +1,40 @@
+{
+  "name": "termhost",
+  "short_name": "termhost",
+  "description": "Your Windows terminals, in your pocket.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0b0d",
+  "theme_color": "#0b0b0d",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Quick text",
+      "short_name": "Text",
+      "description": "Type a note or command straight to your PC — skips the dashboard.",
+      "url": "/?shortcut=text",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "New terminal",
+      "short_name": "New terminal",
+      "description": "Spawn a new terminal on your PC.",
+      "url": "/?shortcut=new",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

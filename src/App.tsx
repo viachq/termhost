@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useEffect, useCallback, useMemo, useRef } from "react";
 import Titlebar from "./components/titlebar/Titlebar";
 import SplitContainer from "./components/splitpane/SplitContainer";
 import SearchBar from "./components/search/SearchBar";
@@ -27,7 +27,6 @@ export default function App() {
   const wsTreeVersion = useTerminalStore((st) => st.wsTreeVersion);
   const activeWsIdx = useWorkspaceStore((st) => st.activeWorkspaceIdx);
   const workspaces = useWorkspaceStore((st) => st.workspaces);
-  const [editingWsIdx, setEditingWsIdx] = useState<number | null>(null);
   const switchTimerRef = useRef<number>(0);
   const explorerOpen = usePanelStore((st) => st.explorerOpen);
   const fullscreen = usePanelStore((st) => st.fullscreen);
@@ -47,6 +46,8 @@ export default function App() {
     }
     workspaceTrees.set(wsIdx, tree);
     bumpWsTreeVersion();
+    // Persist immediately so freshly generated pane IDs survive a hard kill
+    useWorkspaceStore.getState().saveCurrentSplitTree(tree, [], terminalRefs, wsIdx);
   }, [bumpWsTreeVersion]);
 
   useEffect(() => {
@@ -79,13 +80,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const handler = () => {
+    const saveAll = () => {
       for (const [wsIdx] of workspaceTrees) {
         saveTree(wsIdx);
       }
     };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
+    // Periodic save: dev rebuilds kill the process hard and beforeunload never
+    // fires — without this, pane IDs are lost and daemon terminals get orphaned.
+    const interval = window.setInterval(saveAll, 15000);
+    window.addEventListener("beforeunload", saveAll);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("beforeunload", saveAll);
+    };
   }, [saveTree]);
 
   const killWorkspaceTerminals = useCallback((wsIdx: number) => {
@@ -129,6 +136,11 @@ export default function App() {
     saveTree(current);
     clearTimeout(switchTimerRef.current);
     useWorkspaceStore.getState().setActiveWorkspaceIdx(idx);
+    const ws = useWorkspaceStore.getState().workspaces[idx];
+    if (ws && !ws.splitTree) {
+      setActiveView("workspace-editor");
+      return;
+    }
     ensureWorkspaceTree(idx);
     setActiveView("terminals");
     const ids = getTerminalIdsForWorkspace(idx);
@@ -381,12 +393,6 @@ export default function App() {
     saveTree(useWorkspaceStore.getState().activeWorkspaceIdx);
   }, [saveTree]);
 
-  const handleEditWorkspace = useCallback((idx: number) => {
-    useWorkspaceStore.getState().setActiveWorkspaceIdx(idx);
-    setEditingWsIdx(idx);
-    setActiveView("workspace-editor");
-  }, [setActiveView]);
-
   const handleNewWorkspace = useCallback(() => {
     const current = useWorkspaceStore.getState().activeWorkspaceIdx;
     saveTree(current);
@@ -396,17 +402,10 @@ export default function App() {
       color: colorIdx,
       panes: [{ cwd: "", command: "" }],
     });
-    const newIdx = useWorkspaceStore.getState().activeWorkspaceIdx;
-    setEditingWsIdx(newIdx);
     setActiveView("workspace-editor");
   }, [saveTree, setActiveView]);
 
-  const handleWorkspaceSaved = useCallback((nameOnly?: boolean) => {
-    setEditingWsIdx(null);
-    if (nameOnly) {
-      setActiveView("terminals");
-      return;
-    }
+  const handleWorkspaceSaved = useCallback(() => {
     const wsIdx = useWorkspaceStore.getState().activeWorkspaceIdx;
     killWorkspaceTerminals(wsIdx);
     ensureWorkspaceTree(wsIdx);
@@ -425,11 +424,10 @@ export default function App() {
       if (id) handleSplit(id, "vertical");
     },
     onEditWorkspace: () => {
-      const idx = useWorkspaceStore.getState().activeWorkspaceIdx;
-      handleEditWorkspace(idx);
+      window.dispatchEvent(new CustomEvent("agentworkspace:edit-workspace"));
     },
     onNewWorkspace: handleNewWorkspace,
-  }), [handleSplit, handleEditWorkspace, handleNewWorkspace]);
+  }), [handleSplit, handleNewWorkspace]);
 
   const zoomedTerminalId = useTerminalStore((st) => st.zoomedTerminalId);
   useEffect(() => {
@@ -468,7 +466,6 @@ export default function App() {
     <div id="app" style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
       {!fullscreen && <Titlebar
         onSwitchWorkspace={handleSwitchWorkspace}
-        onEditWorkspace={handleEditWorkspace}
         onNewWorkspace={handleNewWorkspace}
         onDeleteWorkspace={handleDeleteWorkspace}
       />}
@@ -505,7 +502,7 @@ export default function App() {
               <WorkspaceEditor editIdx={null} onSave={handleWorkspaceSaved} />
             )}
             {activeView === "workspace-editor" && (
-              <WorkspaceEditor editIdx={editingWsIdx} onSave={handleWorkspaceSaved} />
+              <WorkspaceEditor editIdx={null} onSave={handleWorkspaceSaved} />
             )}
             {searchVisible && <SearchBar onClose={toggleSearch} />}
           </div>

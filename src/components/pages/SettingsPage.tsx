@@ -25,13 +25,14 @@ export default function SettingsPage() {
   const showTerminals = usePanelStore((st) => st.showTerminals);
 
   const [wsRunning, setWsRunning] = useState(false);
-  const [wsIp, setWsIp] = useState("");
+  const [wsIps, setWsIps] = useState<string[]>([]);
 
   const refreshWsStatus = useCallback(async () => {
     try {
       const status = await wsServerStatus();
       setWsRunning(status.running);
-      setWsIp(status.ip || "");
+      const ips = status.ips && status.ips.length ? status.ips : status.ip ? [status.ip] : [];
+      setWsIps(ips);
     } catch {
       setWsRunning(false);
     }
@@ -164,10 +165,18 @@ export default function SettingsPage() {
             {wsRunning ? "Running" : "Stopped"}
           </span>
         </div>
-        {wsRunning && wsIp && (
+        {wsRunning && wsIps.length > 0 && (
           <div style={{ marginTop: 6, fontSize: 11, color: "var(--text-dim)" }}>
-            Open this URL on your phone (same Wi-Fi):
-            <div className={s.wsUrlBox}>{`http://${wsIp}:9090`}</div>
+            Open this URL on your phone:
+            {wsIps.map((ip) => {
+              const isTs = ip.startsWith("100.");
+              return (
+                <div key={ip} style={{ marginTop: 4 }}>
+                  <span style={{ opacity: 0.7 }}>{isTs ? "🌐 Tailscale (anywhere)" : "🏠 Home (same Wi-Fi)"}</span>
+                  <div className={s.wsUrlBox}>{`http://${ip}:9090`}</div>
+                </div>
+              );
+            })}
           </div>
         )}
 

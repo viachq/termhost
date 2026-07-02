@@ -15,7 +15,7 @@ related: [[split-tree-layout], [state-management]]
 | **Terminal ID** | Unique: `term-{timestamp}-{counter}` |
 | **Focus** | Active pane receiving keyboard input |
 | **Activity Marker** | Pane tab highlights when background terminal produces output |
-| **Theme** | xterm.js color palette (built-in: TerminalHub, CGA, Ubuntu) |
+| **Theme** | xterm.js color palette (built-in: TermHost, CGA, Ubuntu) |
 | **Mobile Client** | Remote WebSocket connection for accessing terminals from phone |
 | **File Tab** | Open file in editor (Monaco for code, marked for Markdown) |
 

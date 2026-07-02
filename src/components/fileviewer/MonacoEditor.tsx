@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useSettingsStore } from "../../store/settingsStore";
+import { useFileViewerStore } from "../../store/fileViewerStore";
 import s from "./FileViewer.module.css";
 
 const LANG_MAP: Record<string, string> = {
@@ -12,13 +13,16 @@ const LANG_MAP: Record<string, string> = {
 };
 
 interface Props {
+  tabId: string;
   content: string;
   filename: string;
+  gotoLine?: number;
 }
 
-export default function MonacoEditor({ content, filename }: Props) {
+export default function MonacoEditor({ tabId, content, filename, gotoLine }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<any>(null);
+  const savedContentRef = useRef(content);
 
   const ext = filename.split(".").pop()?.toLowerCase() || "";
   const language = LANG_MAP[ext] || "plaintext";
@@ -43,16 +47,34 @@ export default function MonacoEditor({ content, filename }: Props) {
       if (!containerRef.current) return;
 
       const { uiTheme, termFontFamily } = useSettingsStore.getState();
+      const initial = useFileViewerStore.getState().fileTabs.find((t) => t.id === tabId)?.content ?? content;
+      savedContentRef.current = initial;
 
-      editorRef.current = monaco.editor.create(containerRef.current, {
-        value: content,
+      const editor = monaco.editor.create(containerRef.current, {
+        value: initial,
         language,
         theme: uiTheme !== "dark" ? "vs" : "vs-dark",
         fontSize: 14,
         fontFamily: termFontFamily,
         minimap: { enabled: false },
-        readOnly: true,
+        readOnly: false,
         automaticLayout: true,
+      });
+      editorRef.current = editor;
+
+      editor.onDidChangeModelContent(() => {
+        const value = editor.getValue();
+        useFileViewerStore.getState().updateContent(tabId, value, value !== savedContentRef.current);
+      });
+
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, async () => {
+        const value = editor.getValue();
+        try {
+          await useFileViewerStore.getState().saveTab(tabId, value);
+          savedContentRef.current = value;
+        } catch (e) {
+          console.error("Save failed:", e);
+        }
       });
     })();
 
@@ -61,7 +83,20 @@ export default function MonacoEditor({ content, filename }: Props) {
       editorRef.current?.dispose();
       editorRef.current = null;
     };
-  }, [content, language]);
+  }, [tabId, language]);
+
+  useEffect(() => {
+    if (!gotoLine) return;
+    const t = setInterval(() => {
+      if (!editorRef.current) return;
+      editorRef.current.revealLineInCenter(gotoLine);
+      editorRef.current.setPosition({ lineNumber: gotoLine, column: 1 });
+      editorRef.current.focus();
+      useFileViewerStore.getState().clearGotoLine(tabId);
+      clearInterval(t);
+    }, 50);
+    return () => clearInterval(t);
+  }, [gotoLine, tabId]);
 
   useEffect(() => {
     const unsub = useSettingsStore.subscribe((state) => {

@@ -35,9 +35,9 @@ Key features:
 - **A2A** (agent-to-agent) комунікація через MCP
 - Без WSL
 
-## Порівняння з TerminalHub
+## Порівняння з TermHost
 
-| Фіча | TerminalHub | BridgeSpace | cmux | wmux |
+| Фіча | TermHost | BridgeSpace | cmux | wmux |
 |-------|------------|-------------|------|------|
 | Split panes | + | + | + | + |
 | Workspaces | + | + | + (таби) | + |
@@ -52,7 +52,7 @@ Key features:
 | Платформа | Windows (Tauri) | All | macOS | Windows |
 | Ціна | Free | $20-80/mo | Free | Free |
 
-## Унікальне в TerminalHub
+## Унікальне в TermHost
 - Мобільний доступ через WebSocket
 - Файловий браузер з Monaco editor + Markdown рендеринг
 - Tauri (cross-platform потенціал)

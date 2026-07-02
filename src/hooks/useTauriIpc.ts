@@ -49,6 +49,22 @@ export async function writeFile(path: string, contents: string): Promise<void> {
   return invoke("write_file", { path, contents });
 }
 
+export async function createDir(path: string): Promise<void> {
+  return invoke("create_dir", { path });
+}
+
+export async function renamePath(from: string, to: string): Promise<void> {
+  return invoke("rename_path", { from, to });
+}
+
+export async function deletePath(path: string): Promise<void> {
+  return invoke("delete_path", { path });
+}
+
+export async function runGit(cwd: string, args: string[]): Promise<string> {
+  return invoke("run_git", { cwd, args });
+}
+
 export async function getHomeDir(): Promise<string> {
   return invoke("get_home_dir");
 }
@@ -93,7 +109,7 @@ export async function stopWsServer(): Promise<void> {
   return invoke("stop_ws_server");
 }
 
-export async function wsServerStatus(): Promise<{ running: boolean; ip: string }> {
+export async function wsServerStatus(): Promise<{ running: boolean; ip: string; port: number; ips?: string[]; token: string }> {
   return invoke("ws_server_status");
 }
 
@@ -105,7 +121,11 @@ export async function shutdownDaemon(): Promise<void> {
   return invoke("shutdown_daemon");
 }
 
-export async function daemonStatus(): Promise<{ connected: boolean; terminalCount: number }> {
+export async function restartDaemon(): Promise<void> {
+  return invoke("restart_daemon");
+}
+
+export async function daemonStatus(): Promise<{ connected: boolean; terminalCount: number; protocolMismatch?: boolean }> {
   return invoke("daemon_status");
 }
 

@@ -91,7 +91,7 @@ export default function TerminalPane({ id, cwd, command, isSinglePane, leafCount
   return (
     <div
       ref={paneRef}
-      className={`${s.pane} ${isFocused ? s.focused : ""}`}
+      className={`${s.pane} ${isFocused ? s.focused : ""} ${isSinglePane ? s.singlePane : ""}`}
       data-pane-id={id}
       data-pane-focused={isFocused ? "true" : undefined}
       onDragOver={handleDragOver}

@@ -1,6 +1,8 @@
 import { create } from "zustand";
 
 const HISTORY_KEY = "agentworkspace-browser-history";
+const BOOKMARKS_KEY = "agentworkspace-browser-bookmarks";
+const HISTORY_MAX = 50;
 
 export interface BrowserTab {
   id: string;
@@ -12,6 +14,7 @@ interface BrowserState {
   tabs: BrowserTab[];
   activeTabId: string | null;
   history: string[];
+  bookmarks: string[];
 
   addTab: (url?: string) => string;
   closeTab: (id: string) => void;
@@ -19,6 +22,7 @@ interface BrowserState {
   navigateTab: (id: string, url: string) => void;
   setTabTitle: (id: string, title: string) => void;
   addToHistory: (url: string) => void;
+  toggleBookmark: (url: string) => void;
   getActiveTab: () => BrowserTab | null;
 }
 
@@ -34,13 +38,20 @@ function loadHistory(): string[] {
 }
 
 function saveHistory(urls: string[]) {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(urls.slice(0, 20)));
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(urls.slice(0, HISTORY_MAX)));
+}
+
+function loadBookmarks(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(BOOKMARKS_KEY) || "[]");
+  } catch { return []; }
 }
 
 export const useBrowserStore = create<BrowserState>((set, get) => ({
   tabs: [],
   activeTabId: null,
   history: loadHistory(),
+  bookmarks: loadBookmarks(),
 
   addTab: (url) => {
     const id = makeTabId();
@@ -88,9 +99,19 @@ export const useBrowserStore = create<BrowserState>((set, get) => ({
 
   addToHistory: (url) => {
     set((s) => {
-      const next = [url, ...s.history.filter((u) => u !== url)].slice(0, 20);
+      const next = [url, ...s.history.filter((u) => u !== url)].slice(0, HISTORY_MAX);
       saveHistory(next);
       return { history: next };
+    });
+  },
+
+  toggleBookmark: (url) => {
+    set((s) => {
+      const next = s.bookmarks.includes(url)
+        ? s.bookmarks.filter((u) => u !== url)
+        : [url, ...s.bookmarks];
+      localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(next));
+      return { bookmarks: next };
     });
   },
 

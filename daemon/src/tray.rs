@@ -18,7 +18,7 @@ pub fn run_tray(state: Arc<DaemonState>) {
     let icon = load_icon();
 
     let menu = Menu::new();
-    let show_item = MenuItem::new("Open Agent Workspace", true, None);
+    let show_item = MenuItem::new("Open termhost", true, None);
     let show_id = show_item.id().clone();
     let kill_item = MenuItem::new("Kill all terminals", true, None);
     let kill_id = kill_item.id().clone();
@@ -32,7 +32,7 @@ pub fn run_tray(state: Arc<DaemonState>) {
 
     let _tray = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
-        .with_tooltip("Agent Workspace (daemon)")
+        .with_tooltip("termhost (daemon)")
         .with_icon(icon)
         .build()
         .expect("Failed to create tray icon");
@@ -87,26 +87,27 @@ fn handle_show(state: &Arc<DaemonState>) {
 }
 
 fn handle_kill_all(state: &Arc<DaemonState>) {
-    let ids: Vec<String> = state.pty_manager.lock()
-        .map(|m| m.list_ids())
-        .unwrap_or_default();
-    for id in ids {
-        if let Ok(mut mgr) = state.pty_manager.lock() {
-            mgr.kill(&id);
+    // This runs on the synchronous Win32 message-loop thread — hop onto the
+    // tokio runtime (via the handle daemon_main stashed at startup) to reach
+    // pty-host, which is only reachable through async IPC calls.
+    let Some(handle) = state.rt_handle.get() else { return };
+    let ids: Vec<String> = state.terminal_infos.lock().unwrap().iter().map(|t| t.id.clone()).collect();
+    let state = state.clone();
+    handle.spawn(async move {
+        for id in ids {
+            let _ = state.pty().kill(&id).await;
+            state.buffer_manager.lock().unwrap().remove(&id);
+            state.screen_manager.lock().unwrap().remove(&id);
+            state.terminal_infos.lock().unwrap().retain(|t| t.id != id);
+            state.terminal_sizes.lock().unwrap().remove(&id);
         }
-        if let Ok(mut bm) = state.buffer_manager.lock() {
-            bm.remove(&id);
-        }
-        if let Ok(mut infos) = state.terminal_infos.lock() {
-            infos.retain(|t| t.id != id);
-        }
-    }
+    });
 }
 
 fn launch_app() {
     let daemon_exe = std::env::current_exe().unwrap_or_default();
     let dir = daemon_exe.parent().unwrap_or(std::path::Path::new("."));
-    let app_exe = dir.join("agent-workspace.exe");
+    let app_exe = dir.join("termhost.exe");
 
     if app_exe.exists() {
         let _ = std::process::Command::new(&app_exe)
@@ -118,7 +119,7 @@ fn launch_app() {
             .parent().unwrap()  // daemon/target
             .parent().unwrap()  // daemon
             .parent().unwrap()  // project root
-            .join("src-tauri").join("target").join("debug").join("agent-workspace.exe");
+            .join("src-tauri").join("target").join("debug").join("termhost.exe");
         if dev_app.exists() {
             let _ = std::process::Command::new(&dev_app)
                 .creation_flags(0x00000200)

@@ -38,3 +38,4 @@ src-tauri/gen/
 # Misc
 *.vtt
 transcript_clean.txt
+.cargo/

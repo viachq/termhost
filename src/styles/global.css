@@ -1,9 +1,13 @@
+@import "tailwindcss";
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
   --bg: #0c0c0c;
   --bg-sidebar: #141414;
   --bg-surface: #1e1e1e;
+  --bg-panel: #1a1a1a;
+  --bg-hover: #252525;
   --bg-terminal: #0a0a0a;
   --bg-header: #111111;
   --bg-tabs: #0e0e0e;
@@ -34,6 +38,8 @@ html, body {
   --bg: #f5f5f5;
   --bg-sidebar: #e8e8e8;
   --bg-surface: #dcdcdc;
+  --bg-panel: #f0f0f0;
+  --bg-hover: #d0d0d0;
   --bg-terminal: #ffffff;
   --bg-header: #ececec;
   --bg-tabs: #e0e0e0;
@@ -49,6 +55,8 @@ html, body {
   --bg: #e8e0d4;
   --bg-sidebar: #ddd5c8;
   --bg-surface: #d4cbbe;
+  --bg-panel: #e2dace;
+  --bg-hover: #cbc2b4;
   --bg-terminal: #f0ebe1;
   --bg-header: #e2dace;
   --bg-tabs: #dbd3c6;

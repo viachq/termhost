@@ -1,7 +1,7 @@
 mod daemon_client;
 
 use daemon_client::DaemonClient;
-use agent_workspace_shared::protocol::*;
+use termhost_shared::protocol::*;
 use serde::{Deserialize, Serialize};
 use std::os::windows::process::CommandExt;
 use std::sync::Arc;
@@ -110,10 +110,10 @@ async fn ws_server_status(state: State<'_, AppState>) -> Result<serde_json::Valu
     let seq = state.daemon.next_seq();
     let resp = state.daemon.request(&DaemonRequest::WsServerStatus { seq }).await?;
     match resp {
-        DaemonResponse::WsStatus { running, ip, .. } => {
-            Ok(serde_json::json!({ "running": running, "ip": ip }))
+        DaemonResponse::WsStatus { running, ip, port, ips, token, .. } => {
+            Ok(serde_json::json!({ "running": running, "ip": ip, "port": port, "ips": ips, "token": token }))
         }
-        _ => Ok(serde_json::json!({ "running": false, "ip": "127.0.0.1" })),
+        _ => Ok(serde_json::json!({ "running": false, "ip": "127.0.0.1", "ips": [], "token": "" })),
     }
 }
 
@@ -148,7 +148,7 @@ async fn shutdown_daemon(state: State<'_, AppState>) -> Result<(), String> {
 async fn daemon_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let seq = state.daemon.next_seq();
     match state.daemon.request(&DaemonRequest::Ping { seq }).await {
-        Ok(DaemonResponse::Pong { .. }) => {
+        Ok(DaemonResponse::Pong { version, .. }) => {
             let seq2 = state.daemon.next_seq();
             let terminal_count = match state.daemon.request(&DaemonRequest::ListTerminals { seq: seq2 }).await {
                 Ok(DaemonResponse::TerminalList { terminals, .. }) => terminals.len(),
@@ -156,7 +156,8 @@ async fn daemon_status(state: State<'_, AppState>) -> Result<serde_json::Value, 
             };
             Ok(serde_json::json!({
                 "connected": true,
-                "terminalCount": terminal_count
+                "terminalCount": terminal_count,
+                "protocolMismatch": version != PROTOCOL_VERSION,
             }))
         }
         _ => Ok(serde_json::json!({
@@ -213,6 +214,54 @@ fn write_file(path: String, contents: String) -> Result<(), String> {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     std::fs::write(&path, contents).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn run_git(cwd: String, args: Vec<String>) -> Result<String, String> {
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    // Whitelist read-only git subcommands — this is a viewer, not a shell
+    const ALLOWED: &[&str] = &["status", "log", "diff", "rev-parse", "branch", "show", "stash"];
+    let sub = args.first().map(|s| s.as_str()).unwrap_or("");
+    if !ALLOWED.contains(&sub) {
+        return Err(format!("git subcommand not allowed: {}", sub));
+    }
+    let output = tokio::task::spawn_blocking(move || {
+        std::process::Command::new("git")
+            .args(&args)
+            .current_dir(&cwd)
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    if output.status.success() {
+        Ok(stdout)
+    } else {
+        Err(if stderr.is_empty() { stdout } else { stderr })
+    }
+}
+
+#[tauri::command]
+fn create_dir(path: String) -> Result<(), String> {
+    std::fs::create_dir_all(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn rename_path(from: String, to: String) -> Result<(), String> {
+    std::fs::rename(&from, &to).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_path(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if p.is_dir() {
+        std::fs::remove_dir_all(p).map_err(|e| e.to_string())
+    } else {
+        std::fs::remove_file(p).map_err(|e| e.to_string())
+    }
 }
 
 #[tauri::command]
@@ -290,6 +339,60 @@ async fn browser_hide(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Launch a process via WMI (Win32_Process.Create). WMI-created processes are
+/// children of the WMI service, NOT of this app — so they live outside any job
+/// object tauri dev / cargo wraps us in, and survive dev rebuilds.
+fn launch_via_wmi(exe: &std::path::Path) -> Result<(), String> {
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    let cmdline = format!("\"{}\"", exe.display()).replace('\'', "''");
+    let ps = format!(
+        "Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{{ CommandLine = '{}' }}",
+        cmdline
+    );
+    std::process::Command::new("powershell")
+        .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &ps])
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+        .map_err(|e| format!("Failed to launch daemon via WMI: {}", e))?;
+    Ok(())
+}
+
+fn launch_daemon_exe() -> Result<(), String> {
+    let daemon_exe = std::env::current_exe()
+        .map_err(|e| e.to_string())?
+        .parent()
+        .ok_or("No parent dir")?
+        .join("termhostd.exe");
+
+    if daemon_exe.exists() {
+        // Production: no job object around us — direct spawn.
+        // CREATE_NEW_PROCESS_GROUP (0x200) — daemon gets its own process group
+        // CREATE_BREAKAWAY_FROM_JOB (0x01000000) — escape a job if there is one
+        // We avoid DETACHED_PROCESS (0x8) because it breaks the Win32 message loop needed for tray icon.
+        const FLAGS_BREAKAWAY: u32 = 0x00000200 | 0x01000000;
+        match std::process::Command::new(&daemon_exe).creation_flags(FLAGS_BREAKAWAY).spawn() {
+            Ok(_) => Ok(()),
+            // Job denies breakaway — go through WMI so the daemon ends up outside the job
+            Err(e) if e.raw_os_error() == Some(5) => launch_via_wmi(&daemon_exe),
+            Err(e) => Err(format!("Failed to launch daemon: {}", e)),
+        }
+    } else {
+        // Dev mode: tauri dev wraps us in a job object that kills children on rebuild.
+        // CREATE_BREAKAWAY_FROM_JOB only escapes jobs that allow it (nested jobs may not),
+        // so always launch through WMI here — it's the only reliable way to keep the
+        // daemon (and all PTYs) alive across dev rebuilds.
+        let project_root = std::env::current_exe().map_err(|e| e.to_string())?
+            .parent().and_then(|p| p.parent()).and_then(|p| p.parent()).and_then(|p| p.parent())
+            .ok_or("Cannot resolve project root")?
+            .to_path_buf();
+        let dev_daemon = project_root.join("daemon").join("target").join("debug").join("termhostd.exe");
+        if !dev_daemon.exists() {
+            return Err("Daemon not found. Build it first: cargo build --manifest-path daemon/Cargo.toml".into());
+        }
+        launch_via_wmi(&dev_daemon)
+    }
+}
+
 async fn connect_to_daemon() -> Result<(Arc<DaemonClient>, tokio::sync::mpsc::UnboundedReceiver<DaemonResponse>), String> {
     // Try connecting to existing daemon
     for _ in 0..3 {
@@ -299,56 +402,7 @@ async fn connect_to_daemon() -> Result<(Arc<DaemonClient>, tokio::sync::mpsc::Un
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
 
-    // Launch daemon process
-    let daemon_exe = std::env::current_exe()
-        .map_err(|e| e.to_string())?
-        .parent()
-        .ok_or("No parent dir")?
-        .join("agent-workspace-daemon.exe");
-
-    // CREATE_NEW_PROCESS_GROUP (0x200) — daemon gets its own process group
-    // CREATE_BREAKAWAY_FROM_JOB (0x01000000) — escapes tauri dev's job object
-    // We avoid DETACHED_PROCESS (0x8) because it breaks the Win32 message loop needed for tray icon.
-    const FLAGS_BREAKAWAY: u32 = 0x00000200 | 0x01000000;
-    const FLAGS_NO_BREAKAWAY: u32 = 0x00000200;
-
-    let spawn_with_flags = |flags: u32| -> std::io::Result<()> {
-        if daemon_exe.exists() {
-            std::process::Command::new(&daemon_exe)
-                .creation_flags(flags)
-                .spawn()?;
-        } else {
-            // Dev mode: launch pre-built daemon exe from daemon/target/debug/
-            let project_root = std::env::current_exe().unwrap()
-                .parent().unwrap()  // target/debug
-                .parent().unwrap()  // target
-                .parent().unwrap()  // src-tauri
-                .parent().unwrap()  // project root
-                .to_path_buf();
-            let dev_daemon = project_root.join("daemon").join("target").join("debug").join("agent-workspace-daemon.exe");
-            if dev_daemon.exists() {
-                std::process::Command::new(&dev_daemon)
-                    .creation_flags(flags)
-                    .spawn()?;
-            } else {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("Daemon not found. Build it first: cargo build --manifest-path daemon/Cargo.toml"),
-                ));
-            }
-        }
-        Ok(())
-    };
-
-    if let Err(e) = spawn_with_flags(FLAGS_BREAKAWAY) {
-        if e.raw_os_error() == Some(5) {
-            // Job object doesn't allow breakaway (common in tauri dev / CI) — retry without it
-            spawn_with_flags(FLAGS_NO_BREAKAWAY)
-                .map_err(|e| format!("Failed to launch daemon: {}", e))?;
-        } else {
-            return Err(format!("Failed to launch daemon: {}", e));
-        }
-    }
+    launch_daemon_exe()?;
 
     // Wait for daemon to start (in dev mode, cargo needs to compile first — can take 60s+)
     for i in 0..60 {
@@ -359,6 +413,36 @@ async fn connect_to_daemon() -> Result<(Arc<DaemonClient>, tokio::sync::mpsc::Un
     }
 
     Err("Failed to connect to daemon after launch".into())
+}
+
+#[tauri::command]
+async fn restart_daemon(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let daemon = state.daemon.clone();
+
+    // Already alive? Nothing to do — avoids opening a duplicate connection.
+    let seq = daemon.next_seq();
+    if let Ok(DaemonResponse::Pong { .. }) = daemon.request(&DaemonRequest::Ping { seq }).await {
+        return Ok(());
+    }
+
+    if daemon.reconnect().await.is_err() {
+        launch_daemon_exe()?;
+        let mut connected = false;
+        for i in 0..60 {
+            tokio::time::sleep(std::time::Duration::from_millis(if i < 5 { 300 } else { 1000 })).await;
+            if daemon.reconnect().await.is_ok() {
+                connected = true;
+                break;
+            }
+        }
+        if !connected {
+            return Err("Failed to connect to daemon after launch".into());
+        }
+    }
+
+    let _ = daemon.fire_and_forget(&DaemonRequest::SubscribeAll).await;
+    let _ = app.emit("daemon-reconnected", ());
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -418,6 +502,12 @@ pub fn run() {
                         DaemonResponse::TerminalExited { id, .. } => {
                             let _ = handle.emit(&format!("pty-exit-{}", id), ());
                         }
+                        DaemonResponse::TerminalResized { id, cols, rows } => {
+                            let _ = handle.emit(
+                                &format!("pty-resize-{}", id),
+                                serde_json::json!({ "cols": cols, "rows": rows }),
+                            );
+                        }
                         DaemonResponse::ShowWindow => {
                             if let Some(w) = handle.get_webview_window("main") {
                                 let _ = w.show();
@@ -458,17 +548,23 @@ pub fn run() {
             get_terminal_buffer,
             list_terminals,
             shutdown_daemon,
+            restart_daemon,
             daemon_status,
             list_dir,
             read_file,
             read_file_bytes,
             write_file,
+            create_dir,
+            rename_path,
+            delete_path,
+            run_git,
             get_home_dir,
             get_cwd,
             open_folder,
             start_ws_server,
             stop_ws_server,
             ws_server_status,
+
             sync_workspaces,
             browser_open,
             browser_navigate,

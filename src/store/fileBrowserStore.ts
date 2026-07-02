@@ -60,6 +60,7 @@ interface FileBrowserState {
   loadRoot: (path: string) => Promise<void>;
   toggleExpand: (path: string) => Promise<void>;
   collapseAll: () => void;
+  refreshDir: (path: string) => Promise<void>;
   getFlatTree: () => FlatTreeEntry[];
 }
 
@@ -157,6 +158,21 @@ export const useFileBrowserStore = create<FileBrowserState>((set, get) => ({
   },
 
   collapseAll: () => set({ expandedPaths: new Set() }),
+
+  refreshDir: async (path: string) => {
+    try {
+      const entries = await listDir(path);
+      const dirCache = new Map(get().dirCache);
+      dirCache.set(path, entries);
+      if (path === get().currentBrowsePath) {
+        set({ rootEntries: entries, dirCache });
+      } else {
+        set({ dirCache });
+      }
+    } catch (e) {
+      console.error("Failed to refresh dir:", e);
+    }
+  },
 
   getFlatTree: () => {
     const { rootEntries, expandedPaths, dirCache } = get();

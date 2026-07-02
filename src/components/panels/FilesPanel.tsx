@@ -3,7 +3,8 @@ import { useFileBrowserStore } from "../../store/fileBrowserStore";
 import type { FlatTreeEntry } from "../../store/fileBrowserStore";
 import { useFileViewerStore } from "../../store/fileViewerStore";
 import { useWorkspaceStore } from "../../store/workspaceStore";
-import { openFolder, writeTerminal } from "../../hooks/useTauriIpc";
+import { openFolder, writeTerminal, writeFile, createDir, renamePath, deletePath } from "../../hooks/useTauriIpc";
+import type { FileEntry } from "../../types";
 import { useTerminalStore } from "../../store/terminalStore";
 import { getFileIcon, FILE_ICON_SVG } from "../../constants/fileIcons";
 import s from "./Panels.module.css";
@@ -31,6 +32,23 @@ function formatDate(epochSecs: number): string {
 }
 
 const CHEVRON_SVG = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>`;
+
+function parentOf(path: string): string {
+  return path.replace(/\\[^\\]+$/, "") || "C:\\";
+}
+
+interface CtxMenuState {
+  x: number;
+  y: number;
+  entry: FileEntry | null;
+}
+
+interface DialogState {
+  mode: "newFile" | "newDir" | "rename";
+  dir: string;
+  oldPath?: string;
+  oldName?: string;
+}
 
 export default function FilesPanel() {
   const currentPath = useFileBrowserStore((st) => st.currentBrowsePath);
@@ -65,6 +83,66 @@ export default function FilesPanel() {
   });
   const breadcrumbRef = useRef<HTMLDivElement>(null);
   const fileTreeRef = useRef<HTMLDivElement>(null);
+  const refreshDir = useFileBrowserStore((st) => st.refreshDir);
+  const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [dialogInput, setDialogInput] = useState("");
+
+  useEffect(() => {
+    if (!ctxMenu) {
+      setConfirmDelete(false);
+      return;
+    }
+    const handler = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement)?.closest?.("[data-files-ctx]")) setCtxMenu(null);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [ctxMenu]);
+
+  const openDialog = useCallback((mode: DialogState["mode"], entry: FileEntry | null) => {
+    const dir = entry
+      ? (mode === "rename" ? parentOf(entry.path) : entry.is_dir ? entry.path : parentOf(entry.path))
+      : currentPath;
+    setDialog({ mode, dir, oldPath: entry?.path, oldName: entry?.name });
+    setDialogInput(mode === "rename" ? entry?.name || "" : "");
+    setCtxMenu(null);
+  }, [currentPath]);
+
+  const confirmDialog = useCallback(async () => {
+    if (!dialog) return;
+    const name = dialogInput.trim();
+    if (!name) return;
+    try {
+      if (dialog.mode === "newFile") {
+        await writeFile(`${dialog.dir}\\${name}`, "");
+      } else if (dialog.mode === "newDir") {
+        await createDir(`${dialog.dir}\\${name}`);
+      } else if (dialog.mode === "rename" && dialog.oldPath) {
+        await renamePath(dialog.oldPath, `${dialog.dir}\\${name}`);
+      }
+      await refreshDir(dialog.dir);
+    } catch (e) {
+      console.error("File operation failed:", e);
+    }
+    setDialog(null);
+    setDialogInput("");
+  }, [dialog, dialogInput, refreshDir]);
+
+  const handleDelete = useCallback(async (entry: FileEntry) => {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    try {
+      await deletePath(entry.path);
+      await refreshDir(parentOf(entry.path));
+    } catch (e) {
+      console.error("Delete failed:", e);
+    }
+    setCtxMenu(null);
+  }, [confirmDelete, refreshDir]);
 
   useEffect(() => {
     detectDrives();
@@ -352,7 +430,14 @@ export default function FilesPanel() {
         ))}
       </div>
 
-      <div className={s.fileTree} ref={fileTreeRef}>
+      <div
+        className={s.fileTree}
+        ref={fileTreeRef}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setCtxMenu({ x: e.clientX, y: e.clientY, entry: null });
+        }}
+      >
         {showParent && (
           <div
             className={`${s.fileItemDir} ${highlightIndex === -1 && filter ? s.fileItemHighlight : ""}`}
@@ -391,6 +476,11 @@ export default function FilesPanel() {
               style={{ paddingLeft: 8 + indent }}
               onClick={(e) => handleItemClick(e, item, index)}
               onDoubleClick={() => handleItemDoubleClick(item)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setCtxMenu({ x: e.clientX, y: e.clientY, entry });
+              }}
               draggable
               onDragStart={(e) => {
                 const paths = selectedPaths.size > 0 && selectedPaths.has(entry.path)
@@ -434,6 +524,95 @@ export default function FilesPanel() {
           );
         })}
       </div>
+
+      {ctxMenu && (() => {
+        const entry = ctxMenu.entry;
+        const itemStyle: React.CSSProperties = {
+          display: "block", width: "100%", textAlign: "left", padding: "6px 12px",
+          background: "none", border: "none", color: "var(--text)", fontSize: 12, cursor: "pointer",
+        };
+        return (
+          <div
+            data-files-ctx
+            style={{
+              position: "fixed", left: ctxMenu.x, top: ctxMenu.y, zIndex: 1000,
+              background: "#1a1a1a", border: "1px solid #333", borderRadius: 6,
+              padding: "4px 0", minWidth: 160, boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+            }}
+          >
+            {entry && (
+              <button style={itemStyle} onClick={() => { handleFileClick(entry); setCtxMenu(null); }}>
+                {entry.is_dir ? "Open folder" : "Open"}
+              </button>
+            )}
+            {entry && (
+              <button style={itemStyle} onClick={() => { copyPath(entry.path); setCtxMenu(null); }}>
+                Copy path
+              </button>
+            )}
+            <button style={itemStyle} onClick={() => openDialog("newFile", entry)}>New file…</button>
+            <button style={itemStyle} onClick={() => openDialog("newDir", entry)}>New folder…</button>
+            {entry && (
+              <button style={itemStyle} onClick={() => openDialog("rename", entry)}>Rename…</button>
+            )}
+            {entry && (
+              <button
+                style={{ ...itemStyle, color: confirmDelete ? "#e94560" : "var(--text)" }}
+                onClick={() => handleDelete(entry)}
+              >
+                {confirmDelete ? "Confirm delete?" : "Delete"}
+              </button>
+            )}
+          </div>
+        );
+      })()}
+
+      {dialog && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 1001, display: "flex",
+            alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.4)",
+          }}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setDialog(null); }}
+        >
+          <div style={{ background: "#1a1a1a", border: "1px solid #333", borderRadius: 8, padding: 16, width: 320 }}>
+            <div style={{ fontSize: 13, marginBottom: 8, color: "var(--text)" }}>
+              {dialog.mode === "newFile" && `New file in ${dialog.dir}`}
+              {dialog.mode === "newDir" && `New folder in ${dialog.dir}`}
+              {dialog.mode === "rename" && `Rename ${dialog.oldName}`}
+            </div>
+            <input
+              autoFocus
+              value={dialogInput}
+              onChange={(e) => setDialogInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") confirmDialog();
+                if (e.key === "Escape") setDialog(null);
+              }}
+              placeholder={dialog.mode === "rename" ? "New name" : "Name"}
+              spellCheck={false}
+              style={{
+                width: "100%", boxSizing: "border-box", padding: "6px 8px", fontSize: 13,
+                background: "#0f0f0f", border: "1px solid #333", borderRadius: 4, color: "var(--text)",
+              }}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+              <button
+                style={{ padding: "5px 12px", fontSize: 12, background: "none", border: "1px solid #333", borderRadius: 4, color: "var(--text-dim)", cursor: "pointer" }}
+                onClick={() => setDialog(null)}
+              >
+                Cancel
+              </button>
+              <button
+                style={{ padding: "5px 12px", fontSize: 12, background: "var(--accent)", border: "none", borderRadius: 4, color: "#fff", cursor: "pointer" }}
+                onClick={confirmDialog}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

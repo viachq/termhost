@@ -71,6 +71,8 @@ export interface FileTab {
   isMd: boolean;
   isImage: boolean;
   content: string;
+  dirty?: boolean;
+  gotoLine?: number;
 }
 
 export interface FileEntry {

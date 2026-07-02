@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { daemonStatus, shutdownDaemon, listTerminals, killTerminal } from "../../hooks/useTauriIpc";
+import { daemonStatus, shutdownDaemon, restartDaemon, listTerminals, killTerminal, wsServerStatus } from "../../hooks/useTauriIpc";
+import QRLogin from "../QRLogin";
 import s from "./DaemonIndicator.module.css";
 
 interface TerminalEntry {
@@ -32,6 +33,10 @@ export default function DaemonIndicator() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [terminals, setTerminals] = useState<TerminalEntry[]>([]);
   const [confirming, setConfirming] = useState<"shutdown" | "killAll" | null>(null);
+  const [restarting, setRestarting] = useState(false);
+  const [protocolMismatch, setProtocolMismatch] = useState(false);
+  const [wsIps, setWsIps] = useState<string[]>([]);
+  const [wsPort, setWsPort] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<number>(0);
 
@@ -41,6 +46,7 @@ export default function DaemonIndicator() {
       setMode("daemon");
       setConnected(st.connected);
       setTerminalCount(st.terminalCount);
+      setProtocolMismatch(!!st.protocolMismatch);
     } catch {
       setMode("direct");
       setConnected(false);
@@ -62,6 +68,15 @@ export default function DaemonIndicator() {
     listTerminals()
       .then(setTerminals)
       .catch(() => setTerminals([]));
+    wsServerStatus()
+      .then((st) => {
+        setWsIps(st.ips || []);
+        setWsPort(st.port);
+      })
+      .catch(() => {
+        setWsIps([]);
+        setWsPort(0);
+      });
 
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -89,6 +104,19 @@ export default function DaemonIndicator() {
     setTerminals([]);
     setTerminalCount(0);
     setConfirming(null);
+  };
+
+  const handleRestart = async () => {
+    setRestarting(true);
+    try {
+      await restartDaemon();
+      await pollStatus();
+      listTerminals().then(setTerminals).catch(() => {});
+    } catch {
+      // stays disconnected — user can retry
+    } finally {
+      setRestarting(false);
+    }
   };
 
   const handleShutdown = async () => {
@@ -142,6 +170,10 @@ export default function DaemonIndicator() {
             }</span>
           </div>
 
+          {wsPort > 0 && wsIps.length > 0 && (
+            <QRLogin ips={wsIps} port={wsPort} />
+          )}
+
           {terminals.length > 0 && (
             <div className={s.terminalList}>
               {[...grouped.entries()].map(([wsName, items], gi) => (
@@ -175,11 +207,22 @@ export default function DaemonIndicator() {
             </div>
           )}
 
+          {protocolMismatch && connected && (
+            <div className={s.emptyMsg} style={{ color: "#e5a50a" }}>
+              Daemon is outdated (protocol mismatch). Shutdown daemon, then restart it to update.
+            </div>
+          )}
+
           {terminals.length === 0 && connected && (
             <div className={s.emptyMsg}>No background terminals</div>
           )}
 
           <div className={s.menuActions}>
+            {!connected && mode !== "direct" && (
+              <button className={s.actionBtn} onClick={handleRestart} disabled={restarting}>
+                {restarting ? "Restarting…" : "Restart daemon"}
+              </button>
+            )}
             {terminals.length > 0 && (
               <button
                 className={`${s.actionBtn} ${confirming === "killAll" ? s.actionDanger : ""}`}

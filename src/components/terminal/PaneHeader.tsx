@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useTerminalStore, terminalRefs } from "../../store/terminalStore";
+import { useFileViewerStore } from "../../store/fileViewerStore";
+import { getHomeDir, writeFile } from "../../hooks/useTauriIpc";
 import s from "./Terminal.module.css";
 
 interface Props {
@@ -87,6 +89,29 @@ export default function PaneHeader({ id, cwd, isZoomed, isSinglePane, leafCount,
   const dir = getDir(title, lastDir || cwd);
   const [showAdd, setShowAdd] = useState(false);
 
+  const exportLog = async () => {
+    const ref = terminalRefs.get(id);
+    if (!ref) return;
+    const buf = ref.term.buffer.active;
+    const lines: string[] = [];
+    for (let i = 0; i < buf.length; i++) {
+      const line = buf.getLine(i);
+      if (!line) continue;
+      // Join wrapped lines back into one logical line
+      if (line.isWrapped && lines.length > 0) {
+        lines[lines.length - 1] += line.translateToString(true);
+      } else {
+        lines.push(line.translateToString(true));
+      }
+    }
+    while (lines.length && lines[lines.length - 1] === "") lines.pop();
+    const home = await getHomeDir();
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const path = `${home}\\terminal-log-${stamp}.txt`;
+    await writeFile(path, lines.join("\n"));
+    useFileViewerStore.getState().openFile(path);
+  };
+
   return (
     <div className={s.header} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
       <span className={s.paneLabel} title={fullPath}>{dir}</span>
@@ -146,6 +171,14 @@ export default function PaneHeader({ id, cwd, isZoomed, isSinglePane, leafCount,
             )}
           </button>
         )}
+
+        {/* Export session log */}
+        <button className={s.action} title="Export session log" {...btn(() => { exportLog().catch(() => {}); })}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 2v8M5 7l3 3 3-3" />
+            <path d="M2 12v2h12v-2" />
+          </svg>
+        </button>
 
         {/* Close */}
         <button className={`${s.action} ${s.actionClose}`} title="Close (Ctrl+W)" {...btn(onClose)}>

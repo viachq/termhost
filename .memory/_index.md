@@ -4,7 +4,7 @@
 
 ## architecture/
 
-- [overview.md](architecture/overview.md) — Agent Workspace: Tauri 2 + React terminal multiplexer with sidecar daemon
+- [overview.md](architecture/overview.md) — TermHost: Tauri 2 + React terminal multiplexer with sidecar daemon
 - [daemon-architecture.md](architecture/daemon-architecture.md) — sidecar PTY daemon, named pipe IPC, reconnect flow, Cargo workspace
 - [tech-stack.md](architecture/tech-stack.md) — Tauri 2 + React + TypeScript + Zustand + CSS Modules
 - [split-tree-layout.md](architecture/split-tree-layout.md) — binary tree pane layout, zoom/maximize, focus nav, resize
@@ -29,4 +29,5 @@
 ## domain/
 
 - [workspace-model.md](domain/workspace-model.md) — workspace, pane, split, theme concepts
+- [mobile-remote-access.md](domain/mobile-remote-access.md) — mobile web client, WS server, rendering fix plan, Tailscale setup
 - [similar-projects.md](domain/similar-projects.md) — tmux, cmux, wmux, BridgeSpace context [?]

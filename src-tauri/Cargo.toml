@@ -1,19 +1,19 @@
 [package]
-name = "agent-workspace"
+name = "termhost"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "agent_workspace_lib"
+name = "termhost_lib"
 path = "crates/app/src/lib.rs"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "agent-workspace"
+name = "termhost"
 path = "crates/app/src/main.rs"
 
 [dependencies]
-agent-workspace-shared = { path = "../shared" }
+termhost-shared = { path = "../shared" }
 tauri = { version = "2", features = ["protocol-asset", "unstable", "tray-icon", "image-ico"] }
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
@@ -28,6 +28,9 @@ windows-core = "0.61"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+
+[profile.dev]
+debug = "line-tables-only"
 
 [profile.release]
 opt-level = 3

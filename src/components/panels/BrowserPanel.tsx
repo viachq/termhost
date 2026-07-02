@@ -26,6 +26,8 @@ export default function BrowserPanel({ embedded }: { embedded?: boolean }) {
   const tabs = useBrowserStore((st) => st.tabs);
   const activeTabId = useBrowserStore((st) => st.activeTabId);
   const history = useBrowserStore((st) => st.history);
+  const bookmarks = useBrowserStore((st) => st.bookmarks);
+  const toggleBookmark = useBrowserStore((st) => st.toggleBookmark);
   const addTab = useBrowserStore((st) => st.addTab);
   const closeTab = useBrowserStore((st) => st.closeTab);
   const setActiveTab = useBrowserStore((st) => st.setActiveTab);
@@ -141,6 +143,20 @@ export default function BrowserPanel({ embedded }: { embedded?: boolean }) {
     };
   }, []);
 
+  // Ctrl+L — focus URL bar (ignored while a terminal has focus, ^L clears screen there)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === "KeyL") {
+        if ((e.target as HTMLElement)?.closest?.(".xterm")) return;
+        e.preventDefault();
+        urlRef.current?.focus();
+        urlRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   useEffect(() => {
     if (!panelRef.current || !activeUrl) return;
     let timer: ReturnType<typeof setTimeout>;
@@ -205,6 +221,14 @@ export default function BrowserPanel({ embedded }: { embedded?: boolean }) {
         <button className={s.browserBtn} onClick={handleReload}>
           ↻
         </button>
+        <button
+          className={s.browserBtn}
+          onClick={() => activeUrl && toggleBookmark(activeUrl)}
+          title={bookmarks.includes(activeUrl) ? "Remove bookmark" : "Bookmark this page"}
+          style={bookmarks.includes(activeUrl) ? { color: "#e5a50a" } : undefined}
+        >
+          {bookmarks.includes(activeUrl) ? "★" : "☆"}
+        </button>
       </div>
 
       {hasActiveUrl ? (
@@ -223,6 +247,17 @@ export default function BrowserPanel({ embedded }: { embedded?: boolean }) {
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M6 2v8M2 6h8"/></svg>
               New tab
             </button>
+            {bookmarks.length > 0 && (
+              <div className={s.browserHistory}>
+                <span className={s.browserHistoryLabel}>Bookmarks</span>
+                {bookmarks.map((u) => (
+                  <button key={u} className={s.browserHistoryItem} onClick={() => navigate(u)}>
+                    <span style={{ color: "#e5a50a" }}>★</span>
+                    <span className={s.browserHistoryUrl}>{u.replace(/^https?:\/\//, "")}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             {history.length > 0 && (
               <div className={s.browserHistory}>
                 <span className={s.browserHistoryLabel}>Recently opened</span>

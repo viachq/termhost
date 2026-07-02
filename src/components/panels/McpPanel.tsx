@@ -134,6 +134,88 @@ async function toggleCodexPlugin(plugin: PluginEntry, enabled: boolean) {
   await writeFile(plugin.sourcePath, result);
 }
 
+// --- Add / Edit / Delete ---
+
+interface ServerDraft {
+  source: McpServer["source"];
+  sourcePath: string;
+  oldName?: string;
+  name: string;
+  command: string;
+  argsText: string; // one arg per line
+  url: string;
+  envText: string; // KEY=VALUE per line
+}
+
+function parseDraft(d: ServerDraft): { command?: string; args?: string[]; url?: string; env?: Record<string, string> } {
+  const cfg: any = {};
+  if (d.command.trim()) cfg.command = d.command.trim();
+  const args = d.argsText.split("\n").map((a) => a.trim()).filter(Boolean);
+  if (args.length) cfg.args = args;
+  if (d.url.trim()) cfg.url = d.url.trim();
+  const env: Record<string, string> = {};
+  for (const line of d.envText.split("\n")) {
+    const eq = line.indexOf("=");
+    if (eq > 0) env[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+  }
+  if (Object.keys(env).length) cfg.env = env;
+  return cfg;
+}
+
+async function upsertJsonServer(sourcePath: string, name: string, cfg: any, oldName?: string) {
+  const raw = await tryRead(sourcePath);
+  let data: any = {};
+  try { data = raw ? JSON.parse(raw) : {}; } catch { return; }
+  const servers = data.mcpServers && typeof data.mcpServers === "object"
+    ? data.mcpServers
+    : (data.mcpServers = {});
+  const existing = oldName ? servers[oldName] : servers[name];
+  if (oldName && oldName !== name) delete servers[oldName];
+  // Merge over existing so fields we don't edit (headers, etc.) survive
+  servers[name] = { ...(existing || {}), ...cfg };
+  await writeFile(sourcePath, JSON.stringify(data, null, 2));
+}
+
+async function deleteJsonServer(sourcePath: string, name: string) {
+  const raw = await tryRead(sourcePath);
+  if (!raw) return;
+  try {
+    const data = JSON.parse(raw);
+    if (data.mcpServers?.[name]) delete data.mcpServers[name];
+    else if (data[name]) delete data[name];
+    await writeFile(sourcePath, JSON.stringify(data, null, 2));
+  } catch {}
+}
+
+function removeTomlSection(raw: string, name: string): string {
+  const header = `[mcp_servers.${name}]`;
+  const idx = raw.indexOf(header);
+  if (idx === -1) return raw;
+  const next = raw.indexOf("\n[", idx + header.length);
+  return (raw.slice(0, idx) + (next !== -1 ? raw.slice(next + 1) : "")).trimEnd() + "\n";
+}
+
+async function upsertTomlServer(tomlPath: string, name: string, cfg: any, oldName?: string) {
+  let raw = (await tryRead(tomlPath)) || "";
+  if (oldName) raw = removeTomlSection(raw, oldName);
+  if (oldName !== name) raw = removeTomlSection(raw, name);
+  let section = `\n[mcp_servers.${name}]\n`;
+  if (cfg.command) section += `command = "${cfg.command}"\n`;
+  if (cfg.args?.length) section += `args = [${cfg.args.map((a: string) => `"${a}"`).join(", ")}]\n`;
+  if (cfg.url) section += `url = "${cfg.url}"\n`;
+  if (cfg.env) {
+    const pairs = Object.entries(cfg.env).map(([k, v]) => `"${k}" = "${v}"`).join(", ");
+    section += `env = { ${pairs} }\n`;
+  }
+  await writeFile(tomlPath, raw.trimEnd() + "\n" + section);
+}
+
+async function deleteTomlServer(tomlPath: string, name: string) {
+  const raw = await tryRead(tomlPath);
+  if (!raw) return;
+  await writeFile(tomlPath, removeTomlSection(raw, name));
+}
+
 // --- Data loading ---
 
 async function loadClaudeData(homeDir: string, cwds: string[]): Promise<ToolData> {
@@ -333,14 +415,38 @@ function CollapsibleSection({ title, icon, count, defaultOpen, children }: {
   );
 }
 
-function ServerCard({ srv, onToggle }: { srv: McpServer; onToggle: (enabled: boolean) => void }) {
+function ServerCard({ srv, onToggle, onEdit, onDelete }: {
+  srv: McpServer;
+  onToggle: (enabled: boolean) => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   const detail = srv.command ? shortenCommand(srv.command, srv.args) : srv.url || null;
+  const [confirmDel, setConfirmDel] = useState(false);
+  const iconBtn: React.CSSProperties = {
+    background: "none", border: "none", cursor: "pointer", padding: 2,
+    color: "var(--text-dim)", display: "flex", alignItems: "center",
+  };
 
   return (
     <div className={`${s.mcpCard} ${!srv.enabled ? s.mcpCardDim : ""}`}>
       <div className={s.mcpCardRow}>
         <span className={s.mcpDot} data-status={srv.enabled ? "on" : "off"} />
         <span className={s.mcpCardName}>{srv.name}</span>
+        <button style={iconBtn} title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(); }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+        </button>
+        <button
+          style={{ ...iconBtn, color: confirmDel ? "#e94560" : "var(--text-dim)" }}
+          title={confirmDel ? "Click again to delete" : "Delete"}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (confirmDel) onDelete();
+            else { setConfirmDel(true); setTimeout(() => setConfirmDel(false), 2500); }
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+        </button>
         <Toggle on={srv.enabled} onChange={onToggle} />
       </div>
       {detail && <div className={s.mcpCardDetail} title={detail}>{detail}</div>}
@@ -348,27 +454,42 @@ function ServerCard({ srv, onToggle }: { srv: McpServer; onToggle: (enabled: boo
   );
 }
 
-function ProviderBlock({ label, icon, data, accent, onToggleMcp, onTogglePlugin, onRefresh }: {
+function ProviderBlock({ label, icon, data, accent, onToggleMcp, onTogglePlugin, onAddServer, onEditServer, onDeleteServer }: {
   label: string; icon: string; data: ToolData | null; accent: string;
   onToggleMcp: (srv: McpServer, enabled: boolean) => void;
   onTogglePlugin: (p: PluginEntry, enabled: boolean) => void;
-  onRefresh: () => void;
+  onAddServer: () => void;
+  onEditServer: (srv: McpServer) => void;
+  onDeleteServer: (srv: McpServer) => void;
 }) {
   if (!data) return null;
-  const hasAnything = data.mcpServers.length > 0 || data.plugins.length > 0
-    || data.skills.length > 0 || data.cloudServices.length > 0 || data.projectMcp.length > 0;
-  if (!hasAnything) return null;
 
   return (
     <div className={s.mcpProvider}>
       <div className={s.mcpProviderHeader} style={{ borderLeftColor: accent }}>
         <span dangerouslySetInnerHTML={{ __html: icon }} />
         <span>{label}</span>
+        <button
+          onClick={onAddServer}
+          title="Add MCP server"
+          style={{
+            marginLeft: "auto", background: "none", border: "1px solid #333", borderRadius: 4,
+            color: "var(--text-dim)", fontSize: 11, padding: "2px 8px", cursor: "pointer",
+          }}
+        >
+          + Add server
+        </button>
       </div>
 
       <CollapsibleSection title="MCP Servers" icon={ICON_MCP} count={data.mcpServers.length} defaultOpen>
         {data.mcpServers.map((srv) => (
-          <ServerCard key={srv.name} srv={srv} onToggle={(v) => onToggleMcp(srv, v)} />
+          <ServerCard
+            key={srv.name}
+            srv={srv}
+            onToggle={(v) => onToggleMcp(srv, v)}
+            onEdit={() => onEditServer(srv)}
+            onDelete={() => onDeleteServer(srv)}
+          />
         ))}
       </CollapsibleSection>
 
@@ -418,7 +539,13 @@ function ProviderBlock({ label, icon, data, accent, onToggleMcp, onTogglePlugin,
           count={proj.servers.length}
         >
           {proj.servers.map((srv) => (
-            <ServerCard key={srv.name} srv={srv} onToggle={(v) => onToggleMcp(srv, v)} />
+            <ServerCard
+              key={srv.name}
+              srv={srv}
+              onToggle={(v) => onToggleMcp(srv, v)}
+              onEdit={() => onEditServer(srv)}
+              onDelete={() => onDeleteServer(srv)}
+            />
           ))}
         </CollapsibleSection>
       ))}
@@ -436,6 +563,7 @@ export default function McpPanel({ embedded }: { embedded?: boolean } = {}) {
   const [claudeData, setClaudeData] = useState<ToolData | null>(null);
   const [codexData, setCodexData] = useState<ToolData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [draft, setDraft] = useState<ServerDraft | null>(null);
 
   const loadAll = useCallback(async () => {
     if (!homeDir) return;
@@ -466,6 +594,48 @@ export default function McpPanel({ embedded }: { embedded?: boolean } = {}) {
     await loadAll();
   }, [loadAll]);
 
+  const handleAddServer = useCallback((provider: "claude" | "codex") => {
+    setDraft({
+      source: provider === "claude" ? "claude-settings" : "codex-toml",
+      sourcePath: provider === "claude"
+        ? np(`${homeDir}/.claude/settings.json`)
+        : np(`${homeDir}/.codex/config.toml`),
+      name: "", command: "", argsText: "", url: "", envText: "",
+    });
+  }, [homeDir]);
+
+  const handleEditServer = useCallback((srv: McpServer) => {
+    setDraft({
+      source: srv.source,
+      sourcePath: srv.sourcePath,
+      oldName: srv.fullName,
+      name: srv.name,
+      command: srv.command || "",
+      argsText: (srv.args || []).join("\n"),
+      url: srv.url || "",
+      envText: "",
+    });
+  }, []);
+
+  const handleDeleteServer = useCallback(async (srv: McpServer) => {
+    if (srv.source === "codex-toml") await deleteTomlServer(srv.sourcePath, srv.fullName);
+    else await deleteJsonServer(srv.sourcePath, srv.fullName);
+    await loadAll();
+  }, [loadAll]);
+
+  const handleSaveDraft = useCallback(async () => {
+    if (!draft || !draft.name.trim()) return;
+    const cfg = parseDraft(draft);
+    const name = draft.name.trim();
+    if (draft.source === "codex-toml") {
+      await upsertTomlServer(draft.sourcePath, name, cfg, draft.oldName);
+    } else {
+      await upsertJsonServer(draft.sourcePath, name, cfg, draft.oldName);
+    }
+    setDraft(null);
+    await loadAll();
+  }, [draft, loadAll]);
+
   const isEmpty = claudeData && codexData
     && claudeData.mcpServers.length === 0 && claudeData.plugins.length === 0
     && claudeData.cloudServices.length === 0 && claudeData.projectMcp.length === 0
@@ -492,17 +662,82 @@ export default function McpPanel({ embedded }: { embedded?: boolean } = {}) {
 
         <ProviderBlock
           label="Claude Code" icon={CLAUDE_ICON} data={claudeData} accent="#f97316"
-          onToggleMcp={handleToggleMcp} onTogglePlugin={handleTogglePlugin} onRefresh={loadAll}
+          onToggleMcp={handleToggleMcp} onTogglePlugin={handleTogglePlugin}
+          onAddServer={() => handleAddServer("claude")}
+          onEditServer={handleEditServer} onDeleteServer={handleDeleteServer}
         />
         <ProviderBlock
           label="Codex" icon={CODEX_ICON} data={codexData} accent="#22d3ee"
-          onToggleMcp={handleToggleMcp} onTogglePlugin={handleTogglePlugin} onRefresh={loadAll}
+          onToggleMcp={handleToggleMcp} onTogglePlugin={handleTogglePlugin}
+          onAddServer={() => handleAddServer("codex")}
+          onEditServer={handleEditServer} onDeleteServer={handleDeleteServer}
         />
 
         {!loading && isEmpty && (
           <div className={s.mcpEmpty}>No MCP servers or tools found</div>
         )}
       </div>
+
+      {draft && (() => {
+        const inputStyle: React.CSSProperties = {
+          width: "100%", boxSizing: "border-box", padding: "6px 8px", fontSize: 12,
+          background: "#0f0f0f", border: "1px solid #333", borderRadius: 4, color: "var(--text)",
+          fontFamily: "inherit",
+        };
+        const labelStyle: React.CSSProperties = { fontSize: 11, color: "var(--text-dim)", margin: "8px 0 4px" };
+        return (
+          <div
+            style={{
+              position: "fixed", inset: 0, zIndex: 1001, display: "flex",
+              alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.4)",
+            }}
+            onMouseDown={(e) => { if (e.target === e.currentTarget) setDraft(null); }}
+          >
+            <div style={{ background: "#1a1a1a", border: "1px solid #333", borderRadius: 8, padding: 16, width: 380, maxHeight: "80vh", overflowY: "auto" }}>
+              <div style={{ fontSize: 13, marginBottom: 4, color: "var(--text)" }}>
+                {draft.oldName ? `Edit server: ${draft.oldName}` : "Add MCP server"}
+              </div>
+              <div style={{ fontSize: 10, color: "var(--text-dim)", marginBottom: 8 }}>{draft.sourcePath}</div>
+
+              <div style={labelStyle}>Name</div>
+              <input style={inputStyle} value={draft.name} spellCheck={false} autoFocus
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+
+              <div style={labelStyle}>Command (for stdio servers)</div>
+              <input style={inputStyle} value={draft.command} spellCheck={false} placeholder="npx"
+                onChange={(e) => setDraft({ ...draft, command: e.target.value })} />
+
+              <div style={labelStyle}>Args (one per line)</div>
+              <textarea style={{ ...inputStyle, minHeight: 56, resize: "vertical" }} value={draft.argsText} spellCheck={false}
+                placeholder={"-y\n@modelcontextprotocol/server-filesystem"}
+                onChange={(e) => setDraft({ ...draft, argsText: e.target.value })} />
+
+              <div style={labelStyle}>URL (for HTTP/SSE servers)</div>
+              <input style={inputStyle} value={draft.url} spellCheck={false} placeholder="https://…"
+                onChange={(e) => setDraft({ ...draft, url: e.target.value })} />
+
+              <div style={labelStyle}>Env (KEY=VALUE per line{draft.oldName ? ", leave empty to keep existing" : ""})</div>
+              <textarea style={{ ...inputStyle, minHeight: 40, resize: "vertical" }} value={draft.envText} spellCheck={false}
+                onChange={(e) => setDraft({ ...draft, envText: e.target.value })} />
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+                <button
+                  style={{ padding: "5px 12px", fontSize: 12, background: "none", border: "1px solid #333", borderRadius: 4, color: "var(--text-dim)", cursor: "pointer" }}
+                  onClick={() => setDraft(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  style={{ padding: "5px 12px", fontSize: 12, background: "var(--accent)", border: "none", borderRadius: 4, color: "#fff", cursor: "pointer", opacity: draft.name.trim() ? 1 : 0.5 }}
+                  onClick={handleSaveDraft}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -17,12 +17,12 @@ export function WorkspacePicker({ onSwitch, onCreate, onDelete, onClose }: Props
   const { workspaces, activeWorkspaceIdx } = useMobileStore();
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newColor, setNewColor] = useState(0);
 
+  // Matches the desktop app: no color picker — colors auto-cycle by creation
+  // order, renamed/recolored later isn't a thing there either, just a name.
   const handleCreate = () => {
-    const name = newName.trim();
-    if (!name) return;
-    onCreate(name, newColor);
+    const name = newName.trim() || "Workspace";
+    onCreate(name, workspaces.length % 8);
     setNewName("");
     setCreating(false);
   };
@@ -72,16 +72,6 @@ export function WorkspacePicker({ onSwitch, onCreate, onDelete, onClose }: Props
               placeholder="Workspace name"
               autoFocus
             />
-            <div className="m-ws-colors">
-              {WS_COLORS.map((c, i) => (
-                <button
-                  key={i}
-                  className={`m-ws-color-btn ${i === newColor ? "selected" : ""}`}
-                  style={{ background: c }}
-                  onClick={() => setNewColor(i)}
-                />
-              ))}
-            </div>
             <div className="m-ws-create-actions">
               <button onClick={() => setCreating(false)}>Cancel</button>
               <button className="primary" onClick={handleCreate}>Create</button>

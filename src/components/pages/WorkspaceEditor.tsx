@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useWorkspaceStore } from "../../store/workspaceStore";
 import { usePanelStore } from "../../store/panelStore";
 import { WS_COLORS } from "../../constants/themes";
+import { BUILTIN_TEMPLATES, loadCustomTemplates, saveCustomTemplate, deleteCustomTemplate, type WsTemplate } from "../../constants/wsTemplates";
 import type { PaneConfig } from "../../types";
 import s from "./Pages.module.css";
 
@@ -46,6 +47,23 @@ export default function WorkspaceEditor({ editIdx, onSave }: Props) {
   const [projectFolder, setProjectFolder] = useState("");
   const [panes, setPanes] = useState<PaneConfig[]>(initialPanes);
   const [mode, setMode] = useState<Mode>(detectMode(initialPanes));
+  const [customTemplates, setCustomTemplates] = useState<WsTemplate[]>(loadCustomTemplates);
+  const [templateSaved, setTemplateSaved] = useState(false);
+
+  const applyTemplate = useCallback((t: WsTemplate) => {
+    const folder = projectFolder.trim();
+    setPanes(t.panes.map((p) => ({ cwd: p.cwd || folder || homeDir, command: p.command })));
+    setMode(detectMode(t.panes));
+    if (!name.trim() && !t.builtin) setName(t.name);
+  }, [projectFolder, homeDir, name]);
+
+  const handleSaveTemplate = useCallback(() => {
+    const tplName = name.trim() || `Template (${panes.length} panes)`;
+    saveCustomTemplate({ name: tplName, panes });
+    setCustomTemplates(loadCustomTemplates());
+    setTemplateSaved(true);
+    setTimeout(() => setTemplateSaved(false), 1500);
+  }, [name, panes]);
 
   const applyMode = useCallback((m: Mode) => {
     setMode(m);
@@ -98,9 +116,16 @@ export default function WorkspaceEditor({ editIdx, onSave }: Props) {
         cwd: p.cwd.trim() || homeDir,
         command: p.command.trim(),
       }));
-      const colorIdx = workspaces.length % WS_COLORS.length;
-      addWorkspace({ name: wsName, color: colorIdx, panes: finalPanes });
-      onSave();
+      const activeIdx = useWorkspaceStore.getState().activeWorkspaceIdx;
+      const existing = useWorkspaceStore.getState().workspaces[activeIdx];
+      if (existing && !existing.splitTree) {
+        updateWorkspace(activeIdx, { name: wsName, panes: finalPanes });
+        onSave();
+      } else {
+        const colorIdx = workspaces.length % WS_COLORS.length;
+        addWorkspace({ name: wsName, color: colorIdx, panes: finalPanes });
+        onSave();
+      }
     }
   }, [name, panes, isEdit, editIdx, homeDir, workspaces.length, updateWorkspace, addWorkspace, onSave]);
 
@@ -117,6 +142,34 @@ export default function WorkspaceEditor({ editIdx, onSave }: Props) {
             {isEdit ? "Rename your workspace" : "Configure your terminal layout"}
           </span>
         </div>
+
+        {!isEdit && (
+          <section className={s.section}>
+            <label className={s.fieldLabel}>Templates</label>
+            <div className={s.modePicker} style={{ flexWrap: "wrap" }}>
+              {BUILTIN_TEMPLATES.map((t) => (
+                <button key={t.name} className={s.modeBtn} onClick={() => applyTemplate(t)} title={t.panes.map((p) => p.command || "shell").join(" · ")}>
+                  {t.name}
+                </button>
+              ))}
+              {customTemplates.map((t) => (
+                <span key={t.name} style={{ display: "inline-flex", alignItems: "center" }}>
+                  <button className={s.modeBtn} onClick={() => applyTemplate(t)} title={t.panes.map((p) => p.command || "shell").join(" · ")}>
+                    ★ {t.name}
+                  </button>
+                  <button
+                    className={s.modeBtn}
+                    style={{ padding: "0 6px", marginLeft: -4 }}
+                    title="Delete template"
+                    onClick={() => { deleteCustomTemplate(t.name); setCustomTemplates(loadCustomTemplates()); }}
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
 
         {!isEdit && (
           <section className={s.section}>
@@ -217,6 +270,11 @@ export default function WorkspaceEditor({ editIdx, onSave }: Props) {
         )}
 
         <div className={s.actions}>
+          {!isEdit && (
+            <button className={s.btn} onClick={handleSaveTemplate} title="Save current pane setup as a reusable template">
+              {templateSaved ? "Saved ✓" : "Save as template"}
+            </button>
+          )}
           {isEdit && <button className={s.btn} onClick={handleCancel}>Cancel</button>}
           <button className={s.btnAccent} onClick={handleSave}>
             {isEdit ? "Save Changes" : "Create Workspace"}

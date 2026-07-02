@@ -1,10 +1,23 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSettingsStore } from "../../store/settingsStore";
 import { usePanelStore } from "../../store/panelStore";
 import { THEMES, FONT_OPTIONS } from "../../constants/themes";
-import { startWsServer, stopWsServer, wsServerStatus } from "../../hooks/useTauriIpc";
-import type { CursorStyle, UiTheme } from "../../types";
+import { startWsServer, stopWsServer, wsServerStatus, writeFile, readFile, getHomeDir, daemonStatus, shutdownDaemon, restartDaemon, listTerminals, killTerminal } from "../../hooks/useTauriIpc";
+import { useWorkspaceStore } from "../../store/workspaceStore";
+import { useFileViewerStore } from "../../store/fileViewerStore";
+import type { CursorStyle, UiTheme, Workspace } from "../../types";
 import s from "./Panels.module.css";
+
+interface TerminalEntry {
+  id: string;
+  label: string;
+  cwd: string;
+  command: string;
+  title: string;
+  workspace: string;
+}
+
+type DaemonMode = "daemon" | "direct" | "unknown";
 
 export default function SettingsPanel({ embedded }: { embedded?: boolean } = {}) {
   const uiTheme = useSettingsStore((st) => st.uiTheme);
@@ -24,14 +37,106 @@ export default function SettingsPanel({ embedded }: { embedded?: boolean } = {})
   const setSplitResizeEnabled = useSettingsStore((st) => st.setSplitResizeEnabled);
   const toggleSettings = usePanelStore((st) => st.toggleSettings);
 
+  const [daemonMode, setDaemonMode] = useState<DaemonMode>("unknown");
+  const [daemonConnected, setDaemonConnected] = useState(false);
+  const [daemonTerminalCount, setDaemonTerminalCount] = useState(0);
+  const [daemonTerminals, setDaemonTerminals] = useState<TerminalEntry[]>([]);
+  const [confirmKillAll, setConfirmKillAll] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+  const [protocolMismatch, setProtocolMismatch] = useState(false);
+  const timerRef = useRef<number>(0);
+
+  const pollDaemon = useCallback(async () => {
+    try {
+      const st = await daemonStatus();
+      setDaemonMode("daemon");
+      setDaemonConnected(st.connected);
+      setDaemonTerminalCount(st.terminalCount);
+      setProtocolMismatch(!!st.protocolMismatch);
+    } catch {
+      setDaemonMode("direct");
+      setDaemonConnected(false);
+      setDaemonTerminalCount(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    pollDaemon();
+    timerRef.current = window.setInterval(pollDaemon, 5000);
+    return () => clearInterval(timerRef.current);
+  }, [pollDaemon]);
+
+  const handleDaemonRestart = useCallback(async () => {
+    setRestarting(true);
+    try {
+      await restartDaemon();
+      await pollDaemon();
+    } catch { /* stays disconnected */ }
+    setRestarting(false);
+  }, [pollDaemon]);
+
+  const handleDaemonShutdown = useCallback(async () => {
+    await shutdownDaemon().catch(() => {});
+    setDaemonConnected(false);
+    setDaemonTerminalCount(0);
+    setDaemonTerminals([]);
+  }, []);
+
+  const openDaemonMenu = useCallback(async () => {
+    listTerminals()
+      .then(setDaemonTerminals)
+      .catch(() => setDaemonTerminals([]));
+  }, []);
+
+  const handleKillTerminal = useCallback(async (id: string) => {
+    await killTerminal(id).catch(() => {});
+    setDaemonTerminals((prev) => prev.filter((t) => t.id !== id));
+    setDaemonTerminalCount((prev) => Math.max(0, prev - 1));
+  }, []);
+
+  const handleKillAll = useCallback(async () => {
+    if (!confirmKillAll) {
+      setConfirmKillAll(true);
+      return;
+    }
+    for (const t of daemonTerminals) {
+      await killTerminal(t.id).catch(() => {});
+    }
+    setDaemonTerminals([]);
+    setDaemonTerminalCount(0);
+    setConfirmKillAll(false);
+  }, [confirmKillAll, daemonTerminals]);
+
+  function terminalDisplayName(t: TerminalEntry): { name: string; detail: string } {
+    const detail = t.cwd ? t.cwd.replace(/\\/g, "/") : "";
+    if (t.command) {
+      const cmd = t.command.split(/\s+/)[0];
+      const base = cmd.includes("/") || cmd.includes("\\")
+        ? cmd.split(/[/\\]/).pop()!
+        : cmd;
+      return { name: base, detail };
+    }
+    return { name: "PowerShell", detail };
+  }
+
+  const grouped = new Map<string, TerminalEntry[]>();
+  for (const t of daemonTerminals) {
+    const ws = t.workspace || "No workspace";
+    if (!grouped.has(ws)) grouped.set(ws, []);
+    grouped.get(ws)!.push(t);
+  }
+
+  const dotColor = daemonMode === "direct" ? "#f39c12" : daemonConnected ? "#2ecc71" : "#e74c3c";
+
   const [wsRunning, setWsRunning] = useState(false);
-  const [wsIp, setWsIp] = useState("");
+  const [wsIps, setWsIps] = useState<string[]>([]);
 
   const refreshWsStatus = useCallback(async () => {
     try {
       const status = await wsServerStatus();
       setWsRunning(status.running);
-      setWsIp(status.ip || "");
+      const ips = status.ips && status.ips.length ? status.ips : status.ip ? [status.ip] : [];
+      setWsIps(ips);
     } catch {
       setWsRunning(false);
     }
@@ -53,6 +158,39 @@ export default function SettingsPanel({ embedded }: { embedded?: boolean } = {})
     }
     refreshWsStatus();
   }, [wsRunning, refreshWsStatus]);
+
+  const [wsExportMsg, setWsExportMsg] = useState("");
+
+  const exportWorkspaces = useCallback(async () => {
+    try {
+      const home = await getHomeDir();
+      const path = `${home}\\agentworkspace-workspaces.json`;
+      const data = JSON.stringify(useWorkspaceStore.getState().workspaces, null, 2);
+      await writeFile(path, data);
+      setWsExportMsg(`Exported to ${path}`);
+      useFileViewerStore.getState().openFile(path);
+    } catch (e) {
+      setWsExportMsg(`Export failed: ${e}`);
+    }
+  }, []);
+
+  const importWorkspaces = useCallback(async () => {
+    try {
+      const home = await getHomeDir();
+      const path = `${home}\\agentworkspace-workspaces.json`;
+      const raw = await readFile(path);
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) throw new Error("Invalid format");
+      const valid: Workspace[] = arr.filter((w) => w && typeof w.name === "string" && Array.isArray(w.panes));
+      if (valid.length === 0) throw new Error("No valid workspaces in file");
+      const st = useWorkspaceStore.getState();
+      useWorkspaceStore.setState({ workspaces: [...st.workspaces, ...valid] });
+      useWorkspaceStore.getState().saveWorkspaces();
+      setWsExportMsg(`Imported ${valid.length} workspace(s) from ${path}`);
+    } catch (e) {
+      setWsExportMsg(`Import failed: ${e}`);
+    }
+  }, []);
 
   const body = (
     <>
@@ -130,6 +268,77 @@ export default function SettingsPanel({ embedded }: { embedded?: boolean } = {})
       </div>
 
       <div className={s.settingsSection}>
+        <p className={s.settingsLabel}>Daemon</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+          <span style={{ width: 10, height: 10, borderRadius: "50%", background: dotColor, flexShrink: 0 }} />
+          <span style={{ fontSize: 13, color: "var(--text-main)" }}>
+            {daemonMode === "direct" ? "Direct mode" : daemonConnected ? `Connected (${daemonTerminalCount} terminals)` : "Disconnected"}
+          </span>
+        </div>
+
+        {protocolMismatch && daemonConnected && (
+          <div style={{ fontSize: 11, color: "#e5a50a", marginBottom: 8, lineHeight: 1.4 }}>
+            Daemon is outdated (protocol mismatch). Shutdown daemon, then restart to update.
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+          {!daemonConnected && daemonMode !== "direct" && (
+            <button className={s.settingsBtn} onClick={handleDaemonRestart} disabled={restarting}>
+              {restarting ? "Restarting…" : "Restart"}
+            </button>
+          )}
+          {daemonConnected && (
+            <button className={s.settingsBtn} onClick={handleDaemonShutdown}>Shutdown</button>
+          )}
+          {daemonTerminals.length > 0 && (
+            <button
+              className={s.settingsBtn}
+              style={confirmKillAll ? { borderColor: "#e74c3c", color: "#e74c3c" } : undefined}
+              onClick={handleKillAll}
+            >
+              {confirmKillAll ? "Confirm kill all?" : "Kill all"}
+            </button>
+          )}
+        </div>
+
+        {daemonConnected && (
+          <button className={s.settingsBtn} onClick={openDaemonMenu} style={{ marginBottom: 8 }}>
+            List terminals
+          </button>
+        )}
+
+        {daemonTerminals.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12 }}>
+            {[...grouped.entries()].map(([wsName, items], gi) => (
+              <div key={wsName}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", color: "var(--text-dim)", fontSize: 11, fontWeight: 600, borderTop: gi > 0 ? "1px solid var(--border)" : "none", marginTop: gi > 0 ? 8 : 0, paddingTop: gi > 0 ? 8 : 0 }}>
+                  <span>{wsName}</span>
+                  <span style={{ fontSize: 10, opacity: 0.6 }}>{items.length}</span>
+                </div>
+                {items.map((t) => {
+                  const { name, detail } = terminalDisplayName(t);
+                  return (
+                    <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0 3px 8px" }}>
+                      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-main)" }}>{name}</span>
+                      {detail && <span style={{ fontSize: 10, color: "var(--text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{detail}</span>}
+                      <button
+                        style={{ background: "none", border: "none", color: "var(--text-dim)", cursor: "pointer", padding: "2px 4px", borderRadius: 3, fontSize: 11, flexShrink: 0 }}
+                        onClick={() => handleKillTerminal(t.id)}
+                        title="Kill terminal"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className={s.settingsSection}>
         <p className={s.settingsLabel}>Remote Access</p>
         <div className={s.settingsRow}>
           <label>Mobile</label>
@@ -146,12 +355,42 @@ export default function SettingsPanel({ embedded }: { embedded?: boolean } = {})
             {wsRunning ? "On" : "Off"}
           </span>
         </div>
-        {wsRunning && wsIp && (
+        {wsRunning && wsIps.length > 0 && (
           <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4 }}>
             Open on phone:
-            <div className={s.settingsWsUrl}>{`http://${wsIp}:9090`}</div>
+            {wsIps.map((ip) => {
+              const isTs = ip.startsWith("100.");
+              const url = `http://${ip}:9090`;
+              return (
+                <div key={ip} style={{ marginTop: 2 }}>
+                  <span style={{ opacity: 0.7 }}>{isTs ? "🌐 Tailscale" : "🏠 Home (LAN)"}</span>
+                  <div className={s.settingsWsUrl}>{url}</div>
+                  {isTs && (
+                    <button
+                      className={s.settingsBtn}
+                      style={{ fontSize: 10, padding: "2px 8px", marginTop: 2 }}
+                      onClick={() => navigator.clipboard.writeText(url)}
+                    >
+                      Copy URL
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
+      </div>
+
+      <div className={s.settingsSection}>
+        <p className={s.settingsLabel}>Workspaces</p>
+        <div className={s.settingsRow}>
+          <label>Backup</label>
+          <button className={s.settingsBtn} onClick={exportWorkspaces}>Export</button>
+          <button className={s.settingsBtn} onClick={importWorkspaces}>Import</button>
+        </div>
+        <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4 }}>
+          {wsExportMsg || "JSON file in your home folder (agentworkspace-workspaces.json)"}
+        </div>
       </div>
     </>
   );

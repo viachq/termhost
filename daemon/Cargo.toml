@@ -1,14 +1,22 @@
 [package]
-name = "agent-workspace-daemon"
+name = "termhostd"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "termhostd"
+path = "src/lib.rs"
+
 [[bin]]
-name = "agent-workspace-daemon"
+name = "termhostd"
 path = "src/main.rs"
 
+[[bin]]
+name = "pty-host"
+path = "src/bin/pty_host.rs"
+
 [dependencies]
-agent-workspace-shared = { path = "../shared" }
+termhost-shared = { path = "../shared" }
 portable-pty = "0.8"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
@@ -17,11 +25,17 @@ warp = "0.3"
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 dirs = "6"
 tray-icon = "0.19"
-image = { version = "0.25", default-features = false, features = ["ico"] }
+image = { version = "0.25", default-features = false, features = ["ico", "png", "jpeg"] }
 arboard = "3"
+mime_guess = "2"
+if-addrs = "0.13"
+getrandom = "0.2"
+vt100 = "0.15"
+base64 = "0.22"
+bytes = "1"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["namedpipeapi", "winbase", "handleapi", "winuser", "synchapi", "errhandlingapi"] }
+winapi = { version = "0.3", features = ["namedpipeapi", "winbase", "handleapi", "winuser", "synchapi", "errhandlingapi", "fileapi"] }
 
 [profile.release]
 opt-level = 3

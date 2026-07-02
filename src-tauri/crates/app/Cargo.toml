@@ -1,18 +1,18 @@
 [package]
-name = "agent-workspace"
+name = "termhost"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "agent_workspace_lib"
+name = "termhost_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "agent-workspace"
+name = "termhost"
 path = "src/main.rs"
 
 [dependencies]
-agent-workspace-shared = { path = "../shared" }
+termhost-shared = { path = "../shared" }
 tauri = { version = "2", features = ["protocol-asset", "unstable"] }
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }

@@ -1,8 +1,8 @@
 {
-  "productName": "Agent Workspace",
-  "mainBinaryName": "agent-workspace",
+  "productName": "termhost",
+  "mainBinaryName": "termhost",
   "version": "0.1.0",
-  "identifier": "com.agentworkspace.app",
+  "identifier": "com.termhost.app",
   "build": {
     "frontendDist": "../../../dist",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
   "app": {
     "windows": [
       {
-        "title": "Agent Workspace",
+        "title": "termhost",
         "width": 1400,
         "height": 900,
         "decorations": false,

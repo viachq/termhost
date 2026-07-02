@@ -5,11 +5,11 @@ related: [[overview], [tauri-ipc]]
 ---
 # Sidecar Daemon Architecture
 
-PTY processes live in a standalone `terminalhub-daemon.exe`, independent of the Tauri app. This means terminals survive Tauri restarts (dev hot-reload, window close/reopen).
+PTY processes live in a standalone `termhostd.exe`, independent of the Tauri app. This means terminals survive Tauri restarts (dev hot-reload, window close/reopen).
 
 ## IPC: Named Pipes
 
-Pipe: `\\.\pipe\terminalhub-pty-v1`
+Pipe: `\\.\pipe\termhost-pty-v1`
 Protocol: length-prefixed JSON (`[u32 LE length][JSON payload]`)
 Requests have `seq: u32` for correlation; push messages (Output, TerminalExited) have no seq.
 
@@ -27,8 +27,10 @@ Root `src-tauri/Cargo.toml` is both `[workspace]` and `[package]` (required for 
 - `BufferManager` — 128KB ring buffer per terminal for replay on reconnect
 - `DaemonState` — terminal_infos, workspace_data, client tracking
 - Idle watcher: 5 min timeout when 0 clients + 0 terminals
-- PID file: `%LOCALAPPDATA%\TerminalHub\daemon.pid`
-- WS server: stubs (not yet migrated)
+- PID file: `%LOCALAPPDATA%\TermHost\daemon.pid`
+- WS server: implemented in `daemon/src/ws_server.rs` (warp, port 9090) — serves bundled `dist-mobile/mobile.html` + `/ws` endpoint for the mobile web client (`src/mobile/`, built via `vite.mobile.config.ts` into single file). No auth. WS clients can't resize PTY (resize msgs ignored).
+
+NOTE (2026-06-10): crates moved — daemon is now at repo root `daemon/`, shared at `shared/`; only `app` remains under `src-tauri/crates/`.
 
 ## App (`crates/app/`)
 

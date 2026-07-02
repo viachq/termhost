@@ -3,6 +3,7 @@ import { useMobileStore } from "../store/mobileStore";
 interface Props {
   onSelect: (id: string) => void;
   onWorkspaceClick: () => void;
+  onSpawn: () => void;
 }
 
 const WS_COLORS = [
@@ -10,7 +11,7 @@ const WS_COLORS = [
   "#f39c12", "#e74c3c", "#9b59b6", "#1abc9c",
 ];
 
-export function TabBar({ onSelect, onWorkspaceClick }: Props) {
+export function TabBar({ onSelect, onWorkspaceClick, onSpawn }: Props) {
   const { terminals, activeTerminalId, workspaces, activeWorkspaceIdx } =
     useMobileStore();
 
@@ -37,6 +38,9 @@ export function TabBar({ onSelect, onWorkspaceClick }: Props) {
           </button>
         ))}
       </div>
+      <button className="m-tabbar-add" onClick={onSpawn} title="New terminal on PC" aria-label="New terminal on PC">
+        +
+      </button>
     </div>
   );
 }

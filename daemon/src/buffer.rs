@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-const OUTPUT_BUFFER_MAX: usize = 4 * 1024 * 1024;
+const OUTPUT_BUFFER_MAX: usize = 8 * 1024 * 1024;
 
 pub struct BufferManager {
     buffers: HashMap<String, Arc<Mutex<Vec<u8>>>>,
@@ -27,6 +27,12 @@ impl BufferManager {
                 let start = b.len() - OUTPUT_BUFFER_MAX;
                 *b = b[start..].to_vec();
             }
+        }
+    }
+
+    pub fn append_by_id(&self, id: &str, data: &[u8]) {
+        if let Some(buf) = self.buffers.get(id) {
+            Self::append(buf, data);
         }
     }
 

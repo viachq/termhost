@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ActiveView } from "../types";
 
-export type ExplorerTab = "files" | "browser" | "preview" | "graph" | "translate" | "ssh" | "mcp" | "settings";
+export type ExplorerTab = "files" | "browser" | "preview" | "graph" | "git" | "translate" | "ssh" | "mcp" | "settings";
 
 interface PanelState {
   explorerOpen: boolean;

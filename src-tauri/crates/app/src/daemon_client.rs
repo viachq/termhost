@@ -1,4 +1,4 @@
-use agent_workspace_shared::protocol::*;
+use termhost_shared::protocol::*;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -6,12 +6,13 @@ use tokio::net::windows::named_pipe::ClientOptions;
 use tokio::sync::{mpsc, oneshot, Mutex};
 use std::collections::HashMap;
 
-const PIPE_NAME: &str = r"\\.\pipe\agent-workspace-pty-v1";
+const PIPE_NAME: &str = r"\\.\pipe\termhost-pty-v1";
 
 pub struct DaemonClient {
     writer: Arc<Mutex<tokio::io::WriteHalf<tokio::net::windows::named_pipe::NamedPipeClient>>>,
     pending: Arc<std::sync::Mutex<HashMap<u32, oneshot::Sender<DaemonResponse>>>>,
     seq: AtomicU32,
+    push_tx: mpsc::UnboundedSender<DaemonResponse>,
 }
 
 impl DaemonClient {
@@ -25,7 +26,38 @@ impl DaemonClient {
             Arc::new(std::sync::Mutex::new(HashMap::new()));
         let (push_tx, push_rx) = mpsc::unbounded_channel();
 
-        let pending_clone = pending.clone();
+        Self::spawn_reader(reader, pending.clone(), push_tx.clone());
+
+        let dc = Arc::new(DaemonClient {
+            writer: Arc::new(Mutex::new(writer)),
+            pending,
+            seq: AtomicU32::new(1),
+            push_tx,
+        });
+
+        Ok((dc, push_rx))
+    }
+
+    /// Re-open the pipe after the daemon died/restarted. Reuses the existing
+    /// push channel so already-registered Tauri event forwarding keeps working.
+    pub async fn reconnect(&self) -> Result<(), String> {
+        let client = ClientOptions::new()
+            .open(PIPE_NAME)
+            .map_err(|e| format!("Failed to connect to daemon pipe: {}", e))?;
+
+        let (reader, writer) = tokio::io::split(client);
+        // Drop waiters from the dead connection so they don't hang forever
+        self.pending.lock().unwrap().clear();
+        *self.writer.lock().await = writer;
+        Self::spawn_reader(reader, self.pending.clone(), self.push_tx.clone());
+        Ok(())
+    }
+
+    fn spawn_reader(
+        reader: tokio::io::ReadHalf<tokio::net::windows::named_pipe::NamedPipeClient>,
+        pending: Arc<std::sync::Mutex<HashMap<u32, oneshot::Sender<DaemonResponse>>>>,
+        push_tx: mpsc::UnboundedSender<DaemonResponse>,
+    ) {
         tokio::spawn(async move {
             let mut reader = reader;
             loop {
@@ -40,7 +72,7 @@ impl DaemonClient {
 
                 let seq = response_seq(&resp);
                 if let Some(seq_val) = seq {
-                    let sender = pending_clone.lock().unwrap().remove(&seq_val);
+                    let sender = pending.lock().unwrap().remove(&seq_val);
                     if let Some(tx) = sender {
                         let _ = tx.send(resp);
                         continue;
@@ -50,14 +82,6 @@ impl DaemonClient {
                 let _ = push_tx.send(resp);
             }
         });
-
-        let dc = Arc::new(DaemonClient {
-            writer: Arc::new(Mutex::new(writer)),
-            pending,
-            seq: AtomicU32::new(1),
-        });
-
-        Ok((dc, push_rx))
     }
 
     pub fn next_seq(&self) -> u32 {
@@ -121,8 +145,8 @@ fn response_seq(resp: &DaemonResponse) -> Option<u32> {
         DaemonResponse::BufferData { seq, .. } => Some(*seq),
         DaemonResponse::TerminalList { seq, .. } => Some(*seq),
         DaemonResponse::WsStatus { seq, .. } => Some(*seq),
-        DaemonResponse::Pong { seq } => Some(*seq),
-        DaemonResponse::Output { .. } | DaemonResponse::TerminalExited { .. } | DaemonResponse::ShowWindow => None,
+        DaemonResponse::Pong { seq, .. } => Some(*seq),
+        DaemonResponse::Output { .. } | DaemonResponse::TerminalExited { .. } | DaemonResponse::TerminalResized { .. } | DaemonResponse::ShowWindow => None,
     }
 }
 

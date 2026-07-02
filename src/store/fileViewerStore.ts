@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { FileTab } from "../types";
-import { readFile, readFileBytes } from "../hooks/useTauriIpc";
+import { readFile, readFileBytes, writeFile } from "../hooks/useTauriIpc";
 import { usePanelStore } from "./panelStore";
 
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "bmp", "webp", "ico", "svg", "avif"]);
@@ -14,21 +14,30 @@ interface FileViewerState {
   fileTabs: FileTab[];
   activeTabId: string | null;
 
-  openFile: (path: string) => Promise<void>;
+  openFile: (path: string, gotoLine?: number) => Promise<void>;
   closeTab: (tabId: string) => void;
   switchToTab: (tabId: string) => void;
   closeAll: () => void;
+  setDirty: (tabId: string, dirty: boolean) => void;
+  updateContent: (tabId: string, content: string, dirty: boolean) => void;
+  saveTab: (tabId: string, content: string) => Promise<void>;
+  clearGotoLine: (tabId: string) => void;
 }
 
 export const useFileViewerStore = create<FileViewerState>((set, get) => ({
   fileTabs: [],
   activeTabId: null,
 
-  openFile: async (path: string) => {
+  openFile: async (path: string, gotoLine?: number) => {
     const { fileTabs } = get();
     const existing = fileTabs.find((t) => t.path === path);
     if (existing) {
-      set({ activeTabId: existing.id });
+      set({
+        activeTabId: existing.id,
+        fileTabs: gotoLine
+          ? get().fileTabs.map((t) => (t.id === existing.id ? { ...t, gotoLine } : t))
+          : get().fileTabs,
+      });
       usePanelStore.getState().openExplorer("preview");
       return;
     }
@@ -46,7 +55,7 @@ export const useFileViewerStore = create<FileViewerState>((set, get) => ({
       content = await readFile(path);
     }
     const id = `tab-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const tab: FileTab = { id, path, name, ext, isMd, isImage, content };
+    const tab: FileTab = { id, path, name, ext, isMd, isImage, content, gotoLine };
     set({ fileTabs: [...fileTabs, tab], activeTabId: id });
     usePanelStore.getState().openExplorer("preview");
   },
@@ -70,4 +79,28 @@ export const useFileViewerStore = create<FileViewerState>((set, get) => ({
   switchToTab: (tabId: string) => set({ activeTabId: tabId }),
 
   closeAll: () => set({ fileTabs: [], activeTabId: null }),
+
+  setDirty: (tabId, dirty) =>
+    set((s) => ({
+      fileTabs: s.fileTabs.map((t) => (t.id === tabId && !!t.dirty !== dirty ? { ...t, dirty } : t)),
+    })),
+
+  updateContent: (tabId, content, dirty) =>
+    set((s) => ({
+      fileTabs: s.fileTabs.map((t) => (t.id === tabId ? { ...t, content, dirty } : t)),
+    })),
+
+  saveTab: async (tabId, content) => {
+    const tab = get().fileTabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    await writeFile(tab.path, content);
+    set((s) => ({
+      fileTabs: s.fileTabs.map((t) => (t.id === tabId ? { ...t, content, dirty: false } : t)),
+    }));
+  },
+
+  clearGotoLine: (tabId) =>
+    set((s) => ({
+      fileTabs: s.fileTabs.map((t) => (t.id === tabId ? { ...t, gotoLine: undefined } : t)),
+    })),
 }));

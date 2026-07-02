@@ -9,6 +9,10 @@
   border: 1px solid transparent;
 }
 
+.singlePane {
+  border-color: transparent !important;
+}
+
 .focused {
   border-color: rgba(233, 69, 96, 0.45);
 }

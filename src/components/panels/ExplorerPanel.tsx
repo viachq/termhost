@@ -8,6 +8,7 @@ import TranslatePanel from "./TranslatePanel";
 import McpPanel from "./McpPanel";
 import SettingsPanel from "./SettingsPanel";
 import SshPanel from "./SshPanel";
+import GitPanel from "./GitPanel";
 import FileViewer from "../fileviewer/FileViewer";
 import NoteGraph from "../graph/NoteGraph";
 import s from "./Panels.module.css";
@@ -18,6 +19,7 @@ function renderTabContent(tab: ExplorerTab): ReactNode {
     case "preview": return <FileViewer />;
     case "browser": return <BrowserPanel embedded />;
     case "graph": return <NoteGraph embedded />;
+    case "git": return <GitPanel embedded />;
     case "translate": return <TranslatePanel embedded />;
     case "ssh": return <SshPanel embedded />;
     case "mcp": return <McpPanel embedded />;
@@ -45,6 +47,11 @@ const TABS: { key: ExplorerTab; label: string; icon: string }[] = [
     key: "graph",
     label: "Graph",
     icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="19" r="2.5"/><line x1="8" y1="7" x2="10.5" y2="17"/><line x1="16" y1="7" x2="13.5" y2="17"/><line x1="8.5" y1="6" x2="15.5" y2="6"/></svg>',
+  },
+  {
+    key: "git",
+    label: "Git",
+    icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M6 8.5v7M8 7l7.5 4M8 17l7.5-4"/></svg>',
   },
   {
     key: "translate",

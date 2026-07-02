@@ -5,9 +5,9 @@ related: [[tech-stack], [split-tree-layout], [daemon-architecture]]
 ---
 # Project Overview
 
-Agent Workspace (repo: agent-workspace, formerly TerminalHub) is a Windows terminal multiplexer/workspace manager. Users manage multiple terminal workspaces with split pane layouts, run terminals with different working directories and startup commands, zoom individual panes to full workspace, and access a built-in browser panel.
+TermHost (repo: termhost; formerly Agent Workspace, before that TerminalHub) is a Windows terminal multiplexer/workspace manager. Users manage multiple terminal workspaces with split pane layouts, run terminals with different working directories and startup commands, zoom individual panes to full workspace, and access a built-in browser panel.
 
-GitHub: https://github.com/viachq/agent-workspace
+GitHub: https://github.com/viachq/termhost
 
 Two implementations coexist — legacy C# WPF (MainWindow.xaml, Models/, Services/, Controls/) and active Tauri 2.x (src-tauri/ + src/). The Tauri version is the current active one.
 
@@ -15,7 +15,7 @@ Two implementations coexist — legacy C# WPF (MainWindow.xaml, Models/, Service
 
 - **Frontend**: React + xterm.js in Tauri WebView2
 - **Tauri app** (`crates/app/`): thin proxy, no PTY management — forwards all terminal commands to daemon via named pipe
-- **Daemon** (`crates/daemon/`): standalone `terminalhub-daemon.exe` owns all PTY processes, survives app restarts
+- **Daemon** (`crates/daemon/`): standalone `termhostd.exe` owns all PTY processes, survives app restarts
 - **Shared** (`crates/shared/`): IPC protocol types shared between app and daemon
 
 ## Entry Points
@@ -45,4 +45,4 @@ npm run dev           # Tauri dev (vite + Rust backend + daemon)
 npm run build         # Tauri production build
 ```
 
-Launch via desktop shortcut: `C:\Users\viach\Desktop\Agent Workspace.lnk` → `start-dev.bat` → `npm run dev`
+Launch via desktop shortcut: `C:\Users\viach\Desktop\TermHost.lnk` → `start-dev.bat` → `npm run dev`

@@ -1,46 +1,160 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod buffer;
-mod pty_manager;
+mod hid;
+mod screen;
+mod sleep_blocker;
 mod ws_server;
 
 mod tray;
 
 use buffer::BufferManager;
-use pty_manager::{PtyManager, create_pty};
-use agent_workspace_shared::protocol::*;
+use screen::ScreenManager;
+use termhostd::pty_client::PtyHostClient;
+use termhost_shared::protocol::*;
 
-use std::io::Write;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::windows::named_pipe::{ServerOptions, PipeMode};
-use tokio::sync::{broadcast, Mutex as TokioMutex, Notify};
+use tokio::sync::{broadcast, Mutex as TokioMutex, Notify, OnceCell};
 
-const PIPE_NAME: &str = r"\\.\pipe\agent-workspace-pty-v1";
+const PIPE_NAME: &str = r"\\.\pipe\termhost-pty-v1";
 const IDLE_TIMEOUT_SECS: u64 = 300;
 
 #[derive(Clone, Debug)]
 pub(crate) enum BroadcastMsg {
     TerminalOutput { id: String, data: String },
+    TerminalResized { id: String, cols: u16, rows: u16 },
     ShowWindow,
 }
 
 pub(crate) struct DaemonState {
-    pub pty_manager: std::sync::Mutex<PtyManager>,
+    /// Connects to the separate `pty-host` process, which actually owns the
+    /// PTYs — set once, right at daemon_main startup, before anything else
+    /// runs. See pty_client.rs for why: this daemon can be freely restarted
+    /// without killing anyone's terminal.
+    pub pty_client: OnceCell<PtyHostClient>,
+    /// Handle to the tokio runtime, so the (synchronous) tray message loop can
+    /// spawn async pty-host calls (e.g. "Kill all terminals").
+    pub rt_handle: std::sync::OnceLock<tokio::runtime::Handle>,
     pub buffer_manager: std::sync::Mutex<BufferManager>,
+    /// Server-side vt100 screen per terminal — yields a clean current-screen
+    /// snapshot for freshly-attached mobile clients (see screen.rs).
+    pub screen_manager: std::sync::Mutex<ScreenManager>,
     pub terminal_infos: std::sync::Mutex<Vec<TerminalInfo>>,
+    /// Current PTY grid size per terminal id, used by WS (mobile) clients to render
+    /// at the canonical size the desktop spawned/resized to.
+    pub terminal_sizes: std::sync::Mutex<std::collections::HashMap<String, (u16, u16)>>,
     pub workspace_data: std::sync::Mutex<Vec<WorkspaceData>>,
     pub broadcast_tx: broadcast::Sender<BroadcastMsg>,
     pub client_count: std::sync::atomic::AtomicU32,
     pub activity: Notify,
     pub ws_handle: std::sync::Mutex<Option<ws_server::WsServerHandle>>,
+    pub ws_port: std::sync::Mutex<Option<u16>>,
+    /// Per-process random token; mobile clients must present it on /ws and /api/*.
+    pub ws_token: String,
+    /// Per-terminal active client: "desktop" or "ws".
+    /// Only the active client's resize is applied (size-gate).
+    pub active_clients: std::sync::Mutex<std::collections::HashMap<String, String>>,
+    /// Devices that scanned the QR / hit /api/pair/request and are waiting on
+    /// a human to approve them from the (already-trusted) desktop app.
+    pub pending_pairs: std::sync::Mutex<std::collections::HashMap<String, PendingPair>>,
+    /// Devices a human has approved — each gets its own permanent token, so
+    /// access can be told apart and revoked per-device instead of only ever
+    /// sharing the one static ws_token.
+    pub approved_devices: std::sync::Mutex<Vec<ApprovedDevice>>,
+}
+
+#[derive(Clone)]
+pub(crate) struct PendingPair {
+    pub code: String,
+    pub requested_at: std::time::Instant,
+    pub approved_token: Option<String>,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub(crate) struct ApprovedDevice {
+    pub token: String,
+    pub label: String,
+    pub approved_at: i64,
+}
+
+pub(crate) const PAIR_EXPIRY_SECS: u64 = 300;
+
+impl DaemonState {
+    /// Panics if called before daemon_main's startup connect — that connect is
+    /// the very first thing daemon_main does, before any request can arrive.
+    pub fn pty(&self) -> &PtyHostClient {
+        self.pty_client.get().expect("pty-host client not connected yet")
+    }
+
+    /// True for the one legacy static token OR any approved per-device token.
+    pub fn is_valid_token(&self, token: Option<&str>) -> bool {
+        let Some(t) = token else { return false };
+        if t == self.ws_token {
+            return true;
+        }
+        self.approved_devices.lock().unwrap().iter().any(|d| d.token == t)
+    }
+}
+
+fn devices_path() -> Option<std::path::PathBuf> {
+    dirs::data_local_dir().map(|d| d.join("AgentWorkspace").join("devices.json"))
+}
+
+fn load_approved_devices() -> Vec<ApprovedDevice> {
+    let Some(path) = devices_path() else { return Vec::new() };
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+pub(crate) fn save_approved_devices(devices: &[ApprovedDevice]) {
+    let Some(path) = devices_path() else { return };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    if let Ok(json) = serde_json::to_string_pretty(devices) {
+        let _ = std::fs::write(&path, json);
+    }
+}
+
+fn pty_host_exe_path() -> std::path::PathBuf {
+    let daemon_exe = std::env::current_exe().unwrap_or_default();
+    let dir = daemon_exe.parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
+    dir.join("pty-host.exe")
+}
+
+/// 16 random bytes hex-encoded — a basic gate for the WS server on LAN/Tailscale.
+fn generate_token() -> String {
+    let mut bytes = [0u8; 16];
+    let _ = getrandom::getrandom(&mut bytes);
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+/// Persist the WS token across daemon restarts so a phone's open page keeps working
+/// (a fresh token every launch invalidates the phone's injected token → /ws 404).
+fn load_or_create_token() -> String {
+    let Some(dir) = dirs::data_local_dir() else { return generate_token() };
+    let path = dir.join("TermHost").join("ws_token");
+    if let Ok(t) = std::fs::read_to_string(&path) {
+        let t = t.trim().to_string();
+        if t.len() == 32 && t.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return t;
+        }
+    }
+    let token = generate_token();
+    let _ = std::fs::create_dir_all(dir.join("TermHost"));
+    let _ = std::fs::write(&path, &token);
+    token
 }
 
 fn main() {
     // Single-instance guard via Windows named mutex.
     // The mutex lives for the entire process lifetime.
     let _mutex_guard = unsafe {
-        let name: Vec<u16> = "Global\\AgentWorkspaceDaemon\0".encode_utf16().collect();
+        let name: Vec<u16> = "Global\\TermHostDaemon\0".encode_utf16().collect();
         let h = winapi::um::synchapi::CreateMutexW(
             std::ptr::null_mut(),
             1, // bInitialOwner = TRUE
@@ -58,7 +172,7 @@ fn main() {
 
     // Write PID file
     if let Some(dir) = dirs::data_local_dir() {
-        let pid_dir = dir.join("AgentWorkspace");
+        let pid_dir = dir.join("TermHost");
         let _ = std::fs::create_dir_all(&pid_dir);
         let _ = std::fs::write(pid_dir.join("daemon.pid"), std::process::id().to_string());
     }
@@ -66,22 +180,32 @@ fn main() {
     let (broadcast_tx, _) = broadcast::channel::<BroadcastMsg>(2048);
 
     let state = Arc::new(DaemonState {
-        pty_manager: std::sync::Mutex::new(PtyManager::new()),
+        pty_client: OnceCell::new(),
+        rt_handle: std::sync::OnceLock::new(),
         buffer_manager: std::sync::Mutex::new(BufferManager::new()),
+        screen_manager: std::sync::Mutex::new(ScreenManager::new()),
         terminal_infos: std::sync::Mutex::new(Vec::new()),
+        terminal_sizes: std::sync::Mutex::new(std::collections::HashMap::new()),
         workspace_data: std::sync::Mutex::new(Vec::new()),
         broadcast_tx,
         client_count: std::sync::atomic::AtomicU32::new(0),
         activity: Notify::new(),
         ws_handle: std::sync::Mutex::new(None),
+        ws_port: std::sync::Mutex::new(None),
+        ws_token: load_or_create_token(),
+        active_clients: std::sync::Mutex::new(std::collections::HashMap::new()),
+        pending_pairs: std::sync::Mutex::new(std::collections::HashMap::new()),
+        approved_devices: std::sync::Mutex::new(load_approved_devices()),
     });
 
-    eprintln!("agent-workspace-daemon started on {}", PIPE_NAME);
+    eprintln!("termhostd started on {}", PIPE_NAME);
 
     // Start tokio runtime on a background thread
     let state_clone = state.clone();
+    let state_for_handle = state.clone();
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+        let _ = state_for_handle.rt_handle.set(rt.handle().clone());
         rt.block_on(daemon_main(state_clone));
     });
 
@@ -90,10 +214,88 @@ fn main() {
 }
 
 async fn daemon_main(state: Arc<DaemonState>) {
+    // Connect to pty-host FIRST — spawns it if it isn't already running, and
+    // reattaches any terminals it already owns (e.g. this daemon restarted
+    // while pty-host kept running from before). Everything below assumes
+    // state.pty() works, so this must complete before anything else starts.
+    let pty_host_exe = pty_host_exe_path();
+    let state_out = state.clone();
+    let state_exit = state.clone();
+    match PtyHostClient::connect(
+        &pty_host_exe,
+        move |id, data| {
+            state_out.buffer_manager.lock().unwrap().append_by_id(&id, data.as_bytes());
+            state_out.screen_manager.lock().unwrap().feed_by_id(&id, data.as_bytes());
+            let _ = state_out.broadcast_tx.send(BroadcastMsg::TerminalOutput { id, data });
+        },
+        move |id| {
+            state_exit.buffer_manager.lock().unwrap().remove(&id);
+            state_exit.screen_manager.lock().unwrap().remove(&id);
+            state_exit.terminal_infos.lock().unwrap().retain(|t| t.id != id);
+            state_exit.terminal_sizes.lock().unwrap().remove(&id);
+            state_exit.activity.notify_one();
+        },
+    )
+    .await
+    {
+        Ok(client) => {
+            let _ = state.pty_client.set(client);
+        }
+        Err(e) => {
+            eprintln!("FATAL: could not connect to pty-host ({}): {e}", pty_host_exe.display());
+            std::process::exit(1);
+        }
+    }
+
+    let existing = state.pty().list().await;
+    if !existing.is_empty() {
+        eprintln!("Reattaching {} terminal(s) already running in pty-host", existing.len());
+    }
+    for t in existing {
+        let label = if t.command.is_empty() {
+            format!("PS: {}", t.cwd.rsplit(['\\', '/']).find(|s| !s.is_empty()).unwrap_or("shell"))
+        } else if t.command.len() > 30 {
+            format!("{}...", &t.command[..30])
+        } else {
+            t.command.clone()
+        };
+        state.terminal_infos.lock().unwrap().push(TerminalInfo {
+            id: t.id.clone(),
+            label,
+            cwd: t.cwd.clone(),
+            command: t.command.clone(),
+            title: String::new(),
+            workspace: String::new(),
+        });
+        state.terminal_sizes.lock().unwrap().insert(t.id.clone(), (t.cols, t.rows));
+        state.buffer_manager.lock().unwrap().create(&t.id);
+        state.screen_manager.lock().unwrap().create(&t.id, t.rows, t.cols);
+    }
+
     let state_idle = state.clone();
     tokio::spawn(async move {
         idle_watcher(state_idle).await;
     });
+
+    // Auto-start the WS (mobile) server on boot so the phone can connect without
+    // toggling Settings → Remote Access every launch. Disable with
+    // TERMHOST_WS_AUTOSTART=0; override the port with TERMHOST_WS_PORT (default 9090).
+    let autostart = std::env::var("TERMHOST_WS_AUTOSTART")
+        .map(|v| v != "0" && v.to_lowercase() != "false")
+        .unwrap_or(true);
+    if autostart {
+        let port = std::env::var("TERMHOST_WS_PORT")
+            .ok()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(9090);
+        let already = state.ws_handle.lock().unwrap().is_some();
+        if !already {
+            let (h, addr) = ws_server::start(port, state.clone());
+            *state.ws_handle.lock().unwrap() = Some(h);
+            sleep_blocker::prevent_system_sleep(true);
+            eprintln!("WS server auto-started on {}", addr);
+        }
+    }
 
     loop {
         let server = match ServerOptions::new()
@@ -130,18 +332,14 @@ async fn idle_watcher(state: Arc<DaemonState>) {
         tokio::time::sleep(std::time::Duration::from_secs(30)).await;
 
         let clients = state.client_count.load(std::sync::atomic::Ordering::Relaxed);
-        let has_terminals = state.pty_manager.lock()
-            .map(|m| m.list_ids().len() > 0)
-            .unwrap_or(false);
+        let has_terminals = !state.terminal_infos.lock().unwrap().is_empty();
 
         if clients == 0 && !has_terminals {
             eprintln!("No clients and no terminals, starting idle countdown...");
             tokio::select! {
                 _ = tokio::time::sleep(std::time::Duration::from_secs(IDLE_TIMEOUT_SECS)) => {
                     let clients = state.client_count.load(std::sync::atomic::Ordering::Relaxed);
-                    let has_terminals = state.pty_manager.lock()
-                        .map(|m| m.list_ids().len() > 0)
-                        .unwrap_or(false);
+                    let has_terminals = !state.terminal_infos.lock().unwrap().is_empty();
                     if clients == 0 && !has_terminals {
                         eprintln!("Idle timeout reached, shutting down");
                         std::process::exit(0);
@@ -169,6 +367,9 @@ async fn handle_client(pipe: tokio::net::windows::named_pipe::NamedPipeServer, s
                 Ok(msg) => {
                     let resp = match msg {
                         BroadcastMsg::TerminalOutput { id, data } => DaemonResponse::Output { id, data },
+                        // Forward resizes so the desktop can follow when a phone (Control
+                        // mode) shrinks the shared PTY — renders clean-but-small vs garbled.
+                        BroadcastMsg::TerminalResized { id, cols, rows } => DaemonResponse::TerminalResized { id, cols, rows },
                         BroadcastMsg::ShowWindow => DaemonResponse::ShowWindow,
                     };
                     if send_response(&writer_push, &resp).await.is_err() {
@@ -239,7 +440,7 @@ async fn send_response(
 
 async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<DaemonResponse> {
     match req {
-        DaemonRequest::Ping { seq } => Some(DaemonResponse::Pong { seq }),
+        DaemonRequest::Ping { seq } => Some(DaemonResponse::Pong { seq, version: PROTOCOL_VERSION }),
 
         DaemonRequest::Shutdown => {
             eprintln!("Shutdown requested");
@@ -248,13 +449,6 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
         }
 
         DaemonRequest::Spawn { seq, id, cwd, command, cols, rows } => {
-            {
-                let mgr = state.pty_manager.lock().unwrap();
-                if mgr.has(&id) {
-                    return Some(DaemonResponse::SpawnResult { seq, id });
-                }
-            }
-
             let resolved_cwd = if cwd.is_empty() {
                 dirs::home_dir()
                     .map(|p| p.to_string_lossy().to_string())
@@ -272,87 +466,72 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
                 cmd_str.clone()
             };
 
-            if let Ok(mut infos) = state.terminal_infos.lock() {
-                infos.push(TerminalInfo {
-                    id: id.clone(),
-                    label,
-                    cwd: resolved_cwd.clone(),
-                    command: cmd_str,
-                    title: String::new(),
-                    workspace: String::new(),
-                });
-            }
-
-            let buffer = {
-                let mut bm = state.buffer_manager.lock().unwrap();
-                bm.create(&id)
-            };
-
-            let broadcast_tx = state.broadcast_tx.clone();
-            let id_clone = id.clone();
-
-            match create_pty(&resolved_cwd, command.as_deref(), cols, rows, move |data| {
-                BufferManager::append(&buffer, data.as_bytes());
-                let _ = broadcast_tx.send(BroadcastMsg::TerminalOutput { id: id_clone.clone(), data });
-            }) {
-                Ok(instance) => {
-                    let mut mgr = state.pty_manager.lock().unwrap();
-                    mgr.register(id.clone(), instance);
+            match state.pty().spawn(&id, &resolved_cwd, command.as_deref(), cols, rows).await {
+                Ok(()) => {
+                    // pty-host itself is idempotent on a duplicate id (a retry)
+                    // — only add bookkeeping the first time we see this id.
+                    let already_known = state.terminal_infos.lock().unwrap().iter().any(|t| t.id == id);
+                    if !already_known {
+                        state.terminal_infos.lock().unwrap().push(TerminalInfo {
+                            id: id.clone(),
+                            label,
+                            cwd: resolved_cwd,
+                            command: cmd_str,
+                            title: String::new(),
+                            workspace: String::new(),
+                        });
+                        state.terminal_sizes.lock().unwrap().insert(id.clone(), (cols, rows));
+                        state.buffer_manager.lock().unwrap().create(&id);
+                        state.screen_manager.lock().unwrap().create(&id, rows, cols);
+                    }
                     state.activity.notify_one();
                     Some(DaemonResponse::SpawnResult { seq, id })
                 }
-                Err(e) => Some(DaemonResponse::Error { seq, message: e.to_string() }),
+                Err(e) => Some(DaemonResponse::Error { seq, message: e }),
             }
         }
 
         DaemonRequest::Write { id, data } => {
-            let writer = {
-                let mgr = state.pty_manager.lock().unwrap();
-                mgr.get_writer(&id).ok()
-            };
-            if let Some(w) = writer {
-                if let Ok(mut w) = w.lock() {
-                    let _ = w.write_all(data.as_bytes());
-                }
-            }
+            state.active_clients.lock().unwrap().insert(id.clone(), "desktop".to_string());
+            state.pty().write(&id, &data);
             None
         }
 
         DaemonRequest::Resize { seq, id, cols, rows } => {
-            let master = {
-                let mgr = state.pty_manager.lock().unwrap();
-                mgr.get_master(&id).ok()
-            };
-            if let Some(m) = master {
-                if let Ok(m) = m.lock() {
-                    match m.resize(portable_pty::PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }) {
-                        Ok(_) => return Some(DaemonResponse::Ok { seq }),
-                        Err(e) => return Some(DaemonResponse::Error { seq, message: e.to_string() }),
-                    }
+            state.active_clients.lock().unwrap().insert(id.clone(), "desktop".to_string());
+            match state.pty().resize(&id, cols, rows).await {
+                Ok(()) => {
+                    state.terminal_sizes.lock().unwrap().insert(id.clone(), (cols, rows));
+                    state.screen_manager.lock().unwrap().resize(&id, rows, cols);
+                    // Tell WS (mobile) clients to follow the new canonical size.
+                    let _ = state.broadcast_tx.send(BroadcastMsg::TerminalResized { id, cols, rows });
+                    Some(DaemonResponse::Ok { seq })
                 }
+                Err(e) => Some(DaemonResponse::Error { seq, message: e }),
             }
-            Some(DaemonResponse::Error { seq, message: format!("PTY {} not found", id) })
         }
 
         DaemonRequest::Kill { seq, id } => {
-            {
-                let mut mgr = state.pty_manager.lock().unwrap();
-                mgr.kill(&id);
-            }
-            {
-                let mut bm = state.buffer_manager.lock().unwrap();
-                bm.remove(&id);
-            }
+            let _ = state.pty().kill(&id).await;
+            state.buffer_manager.lock().unwrap().remove(&id);
+            state.screen_manager.lock().unwrap().remove(&id);
             {
                 let mut infos = state.terminal_infos.lock().unwrap();
                 infos.retain(|t| t.id != id);
             }
+            if let Ok(mut sizes) = state.terminal_sizes.lock() {
+                sizes.remove(&id);
+            }
+            for w in state.workspace_data.lock().unwrap().iter_mut() {
+                w.terminal_ids.retain(|tid| tid != &id);
+            }
+            state.active_clients.lock().unwrap().remove(&id);
             state.activity.notify_one();
             Some(DaemonResponse::Ok { seq })
         }
 
         DaemonRequest::HasTerminal { seq, id } => {
-            let exists = state.pty_manager.lock().unwrap().has(&id);
+            let exists = state.terminal_infos.lock().unwrap().iter().any(|t| t.id == id);
             Some(DaemonResponse::HasResult { seq, exists })
         }
 
@@ -383,24 +562,30 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
             let mut handle = state.ws_handle.lock().unwrap();
             if handle.is_some() {
                 let ip = ws_server::get_local_ip_pub();
-                return Some(DaemonResponse::WsStatus { seq, running: true, ip: format!("{}:{}", ip, port) });
+                *state.ws_port.lock().unwrap() = Some(port);
+                return Some(DaemonResponse::WsStatus { seq, running: true, ip: format!("{}:{}", ip, port), port, ips: ws_server::get_local_ips(), token: state.ws_token.clone() });
             }
             let (h, addr) = ws_server::start(port, state.clone());
             *handle = Some(h);
-            Some(DaemonResponse::WsStatus { seq, running: true, ip: addr })
+            *state.ws_port.lock().unwrap() = Some(port);
+            sleep_blocker::prevent_system_sleep(true);
+            Some(DaemonResponse::WsStatus { seq, running: true, ip: addr, port, ips: ws_server::get_local_ips(), token: state.ws_token.clone() })
         }
         DaemonRequest::StopWsServer { seq } => {
             let mut handle = state.ws_handle.lock().unwrap();
             if let Some(h) = handle.take() {
                 h.shutdown();
+                sleep_blocker::prevent_system_sleep(false);
             }
+            *state.ws_port.lock().unwrap() = None;
             Some(DaemonResponse::Ok { seq })
         }
         DaemonRequest::WsServerStatus { seq } => {
             let handle = state.ws_handle.lock().unwrap();
             let running = handle.is_some();
             let ip = ws_server::get_local_ip_pub();
-            Some(DaemonResponse::WsStatus { seq, running, ip })
+            let port = state.ws_port.lock().unwrap().unwrap_or(0);
+            Some(DaemonResponse::WsStatus { seq, running, ip, port, ips: ws_server::get_local_ips(), token: state.ws_token.clone() })
         }
         DaemonRequest::SyncWorkspaces { seq, workspaces, .. } => {
             *state.workspace_data.lock().unwrap() = workspaces;

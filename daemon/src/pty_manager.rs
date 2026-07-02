@@ -65,15 +65,17 @@ impl PtyManager {
     }
 }
 
-pub fn create_pty<F>(
+pub fn create_pty<F, E>(
     cwd: &str,
     command: Option<&str>,
     cols: u16,
     rows: u16,
     on_data: F,
+    on_exit: E,
 ) -> Result<PtyInstance, Box<dyn std::error::Error>>
 where
     F: Fn(String) + Send + 'static,
+    E: FnOnce() + Send + 'static,
 {
     let pty_system = native_pty_system();
     let pair = pty_system.openpty(PtySize {
@@ -176,6 +178,7 @@ where
                 pending.extend_from_slice(&remainder);
             }
         }
+        on_exit();
     });
 
     Ok(PtyInstance {

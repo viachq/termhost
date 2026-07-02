@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+/// Bump on every breaking change to DaemonRequest/DaemonResponse.
+/// The app compares the daemon's version (returned in Pong) against its own
+/// and surfaces a mismatch so the user can restart the outdated daemon.
+pub const PROTOCOL_VERSION: u32 = 1;
+
 // --- Shared types ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,9 +102,17 @@ pub enum DaemonResponse {
     BufferData { seq: u32, id: String, data: String },
     TerminalList { seq: u32, terminals: Vec<TerminalInfo> },
     Output { id: String, data: String },
+    /// Unsolicited: the shared PTY was resized by another client (e.g. a phone in
+    /// Control mode). Lets the desktop follow the size cleanly instead of garbling.
+    TerminalResized { id: String, cols: u16, rows: u16 },
     TerminalExited { id: String, code: Option<i32> },
-    WsStatus { seq: u32, running: bool, ip: String },
-    Pong { seq: u32 },
+    WsStatus { seq: u32, running: bool, ip: String, #[serde(default)] port: u16, #[serde(default)] ips: Vec<String>, #[serde(default)] token: String },
+    // version defaults to 0 for daemons built before versioning existed
+    Pong {
+        seq: u32,
+        #[serde(default)]
+        version: u32,
+    },
     ShowWindow,
 }
 

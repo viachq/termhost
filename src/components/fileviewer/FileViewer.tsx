@@ -40,6 +40,7 @@ export default function FileViewer() {
                 dangerouslySetInnerHTML={{ __html: icon.svg }}
               />
               <span>{tab.name}</span>
+              {tab.dirty && <span style={{ color: "var(--accent)", marginLeft: 4 }}>●</span>}
               <span
                 className={s.tabClose}
                 onClick={(e) => {
@@ -72,7 +73,12 @@ export default function FileViewer() {
                 </div>
               }
             >
-              <MonacoEditor content={activeTab.content} filename={activeTab.name} />
+              <MonacoEditor
+                tabId={activeTab.id}
+                content={activeTab.content}
+                filename={activeTab.name}
+                gotoLine={activeTab.gotoLine}
+              />
             </Suspense>
           ))}
       </div>

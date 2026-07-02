@@ -6,7 +6,7 @@ export interface XtermTheme extends ITheme {
 
 export const THEMES: Record<string, XtermTheme> = {
   agentworkspace: {
-    name: "Agent Workspace",
+    name: "termhost",
     background: "#0a0a0a",
     foreground: "#d4d4d4",
     cursor: "#e94560",

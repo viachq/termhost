@@ -5,6 +5,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SearchAddon } from "@xterm/addon-search";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
+import { ImageAddon } from "@xterm/addon-image";
 import { listen } from "@tauri-apps/api/event";
 import { useSettingsStore } from "../../store/settingsStore";
 import { useTerminalStore, terminalRefs } from "../../store/terminalStore";
@@ -12,7 +13,8 @@ import { useFileViewerStore } from "../../store/fileViewerStore";
 import { spawnTerminal, writeTerminal, resizeTerminal, hasTerminal, getTerminalBuffer } from "../../hooks/useTauriIpc";
 import s from "./Terminal.module.css";
 
-const FILE_PATH_RE = /(?:\.{0,2}[/\\])(?:[a-zA-Z0-9_@.+-]+[/\\])*[a-zA-Z0-9_@.+-]+\.[a-zA-Z]{1,10}(?::(\d+)(?::(\d+))?)?/g;
+// Matches: C:\path\file.ts:42, .\rel\file.rs, src/App.tsx:10:5, file.ts:3
+const FILE_PATH_RE = /(?:[A-Za-z]:[\\/]|\.{1,2}[\\/])?[\w.@+~#$-]+(?:[\\/][\w.@+~#$-]+)*\.[A-Za-z][A-Za-z0-9]{0,9}(?::(\d+)(?::\d+)?)?/g;
 
 interface Props {
   id: string;
@@ -31,6 +33,7 @@ export default function TerminalInstance({ id, cwd, command, onFocus }: Props) {
     let killed = false;
     let webglAddon: WebglAddon | null = null;
     let unlistenFn: (() => void) | null = null;
+    let resizeUnlisten: (() => void) | null = null;
     let resizeTimeout: number;
     let webglRetries = 0;
 
@@ -60,6 +63,9 @@ export default function TerminalInstance({ id, cwd, command, onFocus }: Props) {
     term.loadAddon(unicodeAddon);
     term.unicode.activeVersion = "11";
 
+    const imageAddon = new ImageAddon({ enableSizeReports: true });
+    term.loadAddon(imageAddon);
+
     term.open(el);
 
     const paneEl = el.closest("[data-pane-id]") as HTMLElement | null;
@@ -88,7 +94,92 @@ export default function TerminalInstance({ id, cwd, command, onFocus }: Props) {
 
     tryLoadWebgl();
 
+    // --- Copy mode: keyboard-driven scrollback navigation (tmux-style) ---
+    // Ctrl+Shift+[ enter · arrows/PgUp/PgDn/g/G move · Space anchor · Enter/y copy · Esc/q exit
+    let copyMode = false;
+    let copyCursor = 0;
+    let copyAnchor: number | null = null;
+    let copyBadge: HTMLDivElement | null = null;
+
+    const exitCopyMode = () => {
+      copyMode = false;
+      copyAnchor = null;
+      term.clearSelection();
+      term.scrollToBottom();
+      copyBadge?.remove();
+      copyBadge = null;
+    };
+
+    const enterCopyMode = () => {
+      copyMode = true;
+      const buf = term.buffer.active;
+      copyCursor = buf.baseY + buf.cursorY;
+      copyAnchor = null;
+      term.selectLines(copyCursor, copyCursor);
+      if (!copyBadge) {
+        copyBadge = document.createElement("div");
+        copyBadge.textContent = "COPY · Space=select · Enter=copy · q=exit";
+        copyBadge.style.cssText =
+          "position:absolute;top:4px;right:12px;z-index:10;padding:2px 8px;font-size:10px;" +
+          "border-radius:4px;background:#1a1a1a;color:#e5a50a;border:1px solid #333;pointer-events:none;";
+        if (getComputedStyle(el).position === "static") el.style.position = "relative";
+        el.appendChild(copyBadge);
+      }
+    };
+
+    const updateCopyView = () => {
+      const buf = term.buffer.active;
+      const maxLine = buf.baseY + term.rows - 1;
+      copyCursor = Math.max(0, Math.min(copyCursor, maxLine));
+      if (copyAnchor !== null) {
+        term.selectLines(Math.min(copyAnchor, copyCursor), Math.max(copyAnchor, copyCursor));
+      } else {
+        term.selectLines(copyCursor, copyCursor);
+      }
+      const viewTop = buf.viewportY;
+      if (copyCursor < viewTop) term.scrollToLine(copyCursor);
+      else if (copyCursor >= viewTop + term.rows) term.scrollToLine(copyCursor - term.rows + 1);
+    };
+
+    const handleCopyModeKey = (ev: KeyboardEvent): boolean | null => {
+      if (!copyMode) {
+        if (ev.ctrlKey && ev.shiftKey && ev.code === "BracketLeft") {
+          if (ev.type === "keydown") enterCopyMode();
+          return false;
+        }
+        return null;
+      }
+      if (ev.type !== "keydown") return false;
+      switch (ev.code) {
+        case "Escape": case "KeyQ":
+          exitCopyMode(); break;
+        case "ArrowUp": case "KeyK":
+          copyCursor--; updateCopyView(); break;
+        case "ArrowDown": case "KeyJ":
+          copyCursor++; updateCopyView(); break;
+        case "PageUp":
+          copyCursor -= term.rows; updateCopyView(); break;
+        case "PageDown":
+          copyCursor += term.rows; updateCopyView(); break;
+        case "KeyG":
+          copyCursor = ev.shiftKey ? term.buffer.active.baseY + term.rows - 1 : 0;
+          updateCopyView(); break;
+        case "Space": case "KeyV":
+          copyAnchor = copyAnchor === null ? copyCursor : null;
+          updateCopyView(); break;
+        case "Enter": case "KeyY": case "KeyC": {
+          const sel = term.getSelection();
+          if (sel) navigator.clipboard.writeText(sel);
+          exitCopyMode();
+          break;
+        }
+      }
+      return false;
+    };
+
     term.attachCustomKeyEventHandler((ev) => {
+      const cm = handleCopyModeKey(ev);
+      if (cm !== null) return cm;
       if (ev.ctrlKey && ev.code === "KeyC" && term.hasSelection()) {
         if (ev.type === "keydown") {
           const sel = term.getSelection();
@@ -101,15 +192,32 @@ export default function TerminalInstance({ id, cwd, command, onFocus }: Props) {
       if (ev.ctrlKey && ev.code === "KeyV") {
         if (ev.type === "keydown") {
           ev.preventDefault();
-          navigator.clipboard.readText().then((text) => {
-            if (!text) return;
-            // Normalize line endings: \r\n and \n → \r (what PTY expects)
-            // Preserve trailing spaces and indentation exactly as copied
-            const normalized = text
-              .replace(/\r\n/g, "\n")
-              .replace(/\r/g, "\n")
-              .replace(/\n/g, "\r");
-            term.paste(normalized);
+          navigator.clipboard.read().then((items) => {
+            for (const item of items) {
+              const imageType = item.types.find((t) => t.startsWith("image/"));
+              if (imageType) {
+                item.getType(imageType).then((blob) => {
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    const base64 = (reader.result as string).split(",")[1];
+                    const format = imageType.split("/")[1] || "png";
+                    const name = btoa("paste." + format);
+                    const iip = `\x1b]1337;File=name=${name};size=${blob.size};inline=1;preserveAspectRatio=1:${base64}\x07`;
+                    term.write(iip);
+                  };
+                  reader.readAsDataURL(blob);
+                });
+                return;
+              }
+            }
+            navigator.clipboard.readText().then((text) => {
+              if (!text) return;
+              const normalized = text
+                .replace(/\r\n/g, "\n")
+                .replace(/\r/g, "\n")
+                .replace(/\n/g, "\r");
+              term.paste(normalized);
+            });
           });
         }
         return false;
@@ -135,9 +243,15 @@ export default function TerminalInstance({ id, cwd, command, onFocus }: Props) {
         FILE_PATH_RE.lastIndex = 0;
         let match;
         while ((match = FILE_PATH_RE.exec(text)) !== null) {
-          const startCol = match.index + 1;
-          const endCol = match.index + match[0].length;
           const fullMatch = match[0];
+          const lineNum = match[1] ? parseInt(match[1], 10) : undefined;
+          // Require a path separator or a :line suffix to avoid matching
+          // bare words like "example.com"; skip URL tails (preceded by "/").
+          const hasSep = /[\\/]/.test(fullMatch);
+          const prevChar = match.index > 0 ? text[match.index - 1] : "";
+          if ((!hasSep && !lineNum) || prevChar === "/" || prevChar === "\\") continue;
+          const startCol = match.index + 1;
+          const endCol = match.index + fullMatch.length;
           links.push({
             range: {
               start: { x: startCol, y: lineNumber },
@@ -145,8 +259,7 @@ export default function TerminalInstance({ id, cwd, command, onFocus }: Props) {
             },
             text: fullMatch,
             activate() {
-              const parts = fullMatch.split(":");
-              const filePath = parts[0];
+              const filePath = fullMatch.replace(/(?::\d+)+$/, "");
               const ref = terminalRefs.get(id);
               const cwd = ref?.lastDir || ref?.cwd || "";
               const isAbsolute = /^[A-Z]:[/\\]/i.test(filePath) || filePath.startsWith("/");
@@ -156,7 +269,7 @@ export default function TerminalInstance({ id, cwd, command, onFocus }: Props) {
                   ? `${cwd.replace(/[/\\]$/, "")}${cwd.includes("\\") ? "\\" : "/"}${filePath}`
                   : filePath;
               const normalized = absPath.replace(/\//g, "\\");
-              useFileViewerStore.getState().openFile(normalized);
+              useFileViewerStore.getState().openFile(normalized, lineNum);
             },
           });
         }
@@ -175,6 +288,17 @@ export default function TerminalInstance({ id, cwd, command, onFocus }: Props) {
           unlistenFn();
           return;
         }
+
+        // Follow PTY resizes from another client (e.g. a phone in Control mode):
+        // render clean-but-small instead of garbled. We re-assert our own size when
+        // this pane regains focus (see the focus effect below) — tmux active-client-wins.
+        resizeUnlisten = await listen<{ cols: number; rows: number }>(`pty-resize-${id}`, (event) => {
+          if (killed) return;
+          const { cols, rows } = event.payload;
+          if (cols > 0 && rows > 0 && (term.cols !== cols || term.rows !== rows)) {
+            try { term.resize(cols, rows); } catch {}
+          }
+        });
 
         // Fit before spawn so PTY gets the correct initial size
         try { fitAddon.fit(); } catch {}
@@ -290,7 +414,7 @@ export default function TerminalInstance({ id, cwd, command, onFocus }: Props) {
       term,
       fitAddon,
       searchAddon,
-      unlisten: () => unlistenFn?.(),
+      unlisten: () => { unlistenFn?.(); resizeUnlisten?.(); },
       resizeObserver: resizeObs,
       command: command || "",
       cwd: cwd || "",
@@ -322,6 +446,7 @@ export default function TerminalInstance({ id, cwd, command, onFocus }: Props) {
       resizeObs.disconnect();
       el.removeEventListener("wheel", handleWheel, { capture: true } as EventListenerOptions);
       unlistenFn?.();
+      resizeUnlisten?.();
       terminalRefs.delete(id);
       try { webglAddon?.dispose(); } catch {}
       webglAddon = null;
@@ -341,6 +466,17 @@ export default function TerminalInstance({ id, cwd, command, onFocus }: Props) {
           if (!ref) return;
           ref.term.focus();
           ref.lastActiveAt = Date.now();
+          // Re-assert this desktop pane's canonical size on focus: a phone may have
+          // shrunk the shared PTY in Control mode while we were away (tmux "active
+          // client wins" — whoever interacts last owns the size).
+          requestAnimationFrame(() => {
+            try {
+              ref.fitAddon.fit();
+              if (ref.term.cols > 0 && ref.term.rows > 0) {
+                resizeTerminal(id, ref.term.cols, ref.term.rows).catch(() => {});
+              }
+            } catch {}
+          });
           // Restore buffer if it was trimmed
           if (ref.bufferTrimmed) {
             ref.bufferTrimmed = false;
@@ -384,6 +520,22 @@ export default function TerminalInstance({ id, cwd, command, onFocus }: Props) {
       ref={containerRef}
       className={s.xtermContainer}
       onClick={onFocus}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        const text = e.dataTransfer.getData("text/plain");
+        if (!text) return;
+        const paths = text
+          .split("\n")
+          .filter(Boolean)
+          .map((p) => (/\s/.test(p) ? `"${p}"` : p))
+          .join(" ");
+        writeTerminal(id, paths);
+        onFocus();
+      }}
     />
   );
 }
