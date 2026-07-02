@@ -132,6 +132,10 @@ The gap termhost fills: projects in this space are either *a workspace* (cmux, w
 
 Actively developed and used daily by its author to drive Claude Code from a phone. Expect rough edges and breaking changes; issues and ideas are welcome.
 
+## License
+
+[MIT](LICENSE)
+
 ---
 
 *Keywords: remote terminal, Windows terminal multiplexer, control Claude Code from phone, mobile terminal, tmux alternative for Windows, PWA terminal, self-hosted remote access, AI coding agent remote control, xterm.js, Tauri, Rust, ConPTY.*
