@@ -9,6 +9,7 @@ import McpPanel from "./McpPanel";
 import SettingsPanel from "./SettingsPanel";
 import SshPanel from "./SshPanel";
 import GitPanel from "./GitPanel";
+import PairingPanel from "./PairingPanel";
 import FileViewer from "../fileviewer/FileViewer";
 import NoteGraph from "../graph/NoteGraph";
 import s from "./Panels.module.css";
@@ -23,6 +24,7 @@ function renderTabContent(tab: ExplorerTab): ReactNode {
     case "translate": return <TranslatePanel embedded />;
     case "ssh": return <SshPanel embedded />;
     case "mcp": return <McpPanel embedded />;
+    case "pairing": return <PairingPanel embedded />;
     case "settings": return <SettingsPanel embedded />;
   }
 }
@@ -67,6 +69,11 @@ const TABS: { key: ExplorerTab; label: string; icon: string }[] = [
     key: "mcp",
     label: "MCP",
     icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><path d="M14 14h8v8h-8z" opacity="0.5"/><circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="18" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="6" cy="18" r="1.5" fill="currentColor" stroke="none"/></svg>',
+  },
+  {
+    key: "pairing",
+    label: "Pairing",
+    icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>',
   },
   {
     key: "settings",

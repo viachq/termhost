@@ -15,24 +15,34 @@ path = "src/main.rs"
 name = "pty-host"
 path = "src/bin/pty_host.rs"
 
+[[bin]]
+name = "termhostd-android"
+path = "src/android_main.rs"
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = { version = "0.21", default-features = false, features = ["invocation"] }
+
 [dependencies]
 termhost-shared = { path = "../shared" }
-portable-pty = "0.8"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 warp = "0.3"
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 dirs = "6"
-tray-icon = "0.19"
-image = { version = "0.25", default-features = false, features = ["ico", "png", "jpeg"] }
-arboard = "3"
 mime_guess = "2"
 if-addrs = "0.13"
 getrandom = "0.2"
 vt100 = "0.15"
 base64 = "0.22"
 bytes = "1"
+libc = "0.2"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+portable-pty = "0.8"
+tray-icon = "0.19"
+image = { version = "0.25", default-features = false, features = ["ico", "png", "jpeg"] }
+arboard = "3"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["namedpipeapi", "winbase", "handleapi", "winuser", "synchapi", "errhandlingapi", "fileapi"] }

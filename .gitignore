@@ -39,3 +39,6 @@ src-tauri/gen/
 *.vtt
 transcript_clean.txt
 .cargo/
+
+# Draft icons
+icons-draft/

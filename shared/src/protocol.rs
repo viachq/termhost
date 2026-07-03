@@ -15,6 +15,8 @@ pub struct TerminalInfo {
     pub command: String,
     pub title: String,
     pub workspace: String,
+    #[serde(default, rename = "allowRemote")]
+    pub allow_remote: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,7 +91,77 @@ pub enum DaemonRequest {
     Ping {
         seq: u32,
     },
+    PendingPairs {
+        seq: u32,
+    },
+    PairApprove {
+        seq: u32,
+        device_id: String,
+        label: String,
+    },
+    PairReject {
+        seq: u32,
+        device_id: String,
+    },
+    ListDevices {
+        seq: u32,
+    },
+    RevokeDevice {
+        seq: u32,
+        token: String,
+    },
+    RenameDevice {
+        seq: u32,
+        token: String,
+        label: String,
+    },
+    UpdateDeviceNote {
+        seq: u32,
+        token: String,
+        note: String,
+    },
+    SetAutoApprove {
+        seq: u32,
+        enabled: bool,
+    },
+    GetAutoApprove {
+        seq: u32,
+    },
+    SetSleepConfig {
+        seq: u32,
+        never: bool,
+        timeout_minutes: u32,
+    },
+    GetSleepConfig {
+        seq: u32,
+    },
+    SetTerminalRemote {
+        seq: u32,
+        id: String,
+        allowed: bool,
+    },
     Shutdown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingPairInfo {
+    pub device_id: String,
+    pub code: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApprovedDeviceInfo {
+    pub token: String,
+    pub label: String,
+    pub approved_at: i64,
+    #[serde(default)]
+    pub last_seen: Option<i64>,
+    #[serde(default)]
+    pub device_type: Option<String>,
+    #[serde(default)]
+    pub note: String,
+    #[serde(default)]
+    pub online: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,6 +186,23 @@ pub enum DaemonResponse {
         version: u32,
     },
     ShowWindow,
+    PendingPairsResult {
+        seq: u32,
+        pairs: Vec<PendingPairInfo>,
+    },
+    ListDevicesResult {
+        seq: u32,
+        devices: Vec<ApprovedDeviceInfo>,
+    },
+    AutoApproveStatus {
+        seq: u32,
+        enabled: bool,
+    },
+    SleepConfigStatus {
+        seq: u32,
+        never: bool,
+        timeout_minutes: u32,
+    },
 }
 
 // --- Frame encoding/decoding ---

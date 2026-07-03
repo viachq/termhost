@@ -236,3 +236,64 @@
 .actionDanger:hover {
   background: rgba(233, 69, 96, 0.12) !important;
 }
+
+.pairRequests {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pairRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(233, 69, 96, 0.08);
+  border: 1px solid rgba(233, 69, 96, 0.25);
+  border-radius: 8px;
+}
+
+.pairCode {
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 2px;
+  color: var(--accent, #e94560);
+  flex-shrink: 0;
+}
+
+.pairLabel {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-dim);
+  min-width: 0;
+}
+
+.pairApprove {
+  flex-shrink: 0;
+  background: var(--accent, #e94560);
+  border: none;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.pairReject {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+}
+.pairReject:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}

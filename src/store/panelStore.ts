@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ActiveView } from "../types";
 
-export type ExplorerTab = "files" | "browser" | "preview" | "graph" | "git" | "translate" | "ssh" | "mcp" | "settings";
+export type ExplorerTab = "files" | "browser" | "preview" | "graph" | "git" | "translate" | "ssh" | "mcp" | "settings" | "pairing";
 
 interface PanelState {
   explorerOpen: boolean;
@@ -25,6 +25,7 @@ interface PanelState {
   toggleSettings: () => void;
   setActiveView: (view: ActiveView) => void;
   showTerminals: () => void;
+  showDashboard: () => void;
   toggleFullscreen: () => void;
 
   // compat
@@ -45,7 +46,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
   splitRatio: 0.5,
   explorerWidth: 380,
   searchVisible: false,
-  activeView: "terminals",
+  activeView: "dashboard",
   fullscreen: false,
 
   openExplorer: (tab) => set((s) => {
@@ -76,6 +77,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
   toggleSettings: () => get().toggleExplorer("settings"),
   setActiveView: (activeView) => set({ activeView }),
   showTerminals: () => set({ activeView: "terminals" }),
+  showDashboard: () => set({ activeView: "dashboard" }),
 
   // compat
   get translateOpen() { return get().explorerOpen && get().explorerTab === "translate"; },

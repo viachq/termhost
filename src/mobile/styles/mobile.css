@@ -2182,3 +2182,79 @@ html, body, #root {
   border-radius: 8px;
   font-size: 11px;
 }
+
+/* ===== Pairing flow (ConnectScreen, no token yet) ===== */
+.m-pair-flow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.m-pair-code {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 6px;
+  color: var(--accent);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 20px;
+}
+
+/* QR Scanner */
+.m-qr-scanner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 320px;
+}
+.m-qr-video {
+  width: 100%;
+  max-width: 280px;
+  border-radius: 12px;
+  border: 2px solid var(--accent);
+}
+.m-qr-frame {
+  width: 200px;
+  height: 200px;
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+.m-qr-scanner .m-connect-desc {
+  text-align: center;
+}
+
+.m-connect-scan-cancel {
+  padding: 12px 32px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.m-connect-scan-btn {
+  padding: 10px 24px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: var(--mono);
+}
+.m-connect-scan-btn:active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}

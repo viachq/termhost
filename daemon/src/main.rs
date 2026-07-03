@@ -37,6 +37,11 @@ pub(crate) struct DaemonState {
     /// Handle to the tokio runtime, so the (synchronous) tray message loop can
     /// spawn async pty-host calls (e.g. "Kill all terminals").
     pub rt_handle: std::sync::OnceLock<tokio::runtime::Handle>,
+    pub auto_approve: std::sync::Mutex<bool>,
+    pub sleep_never: std::sync::Mutex<bool>,
+    pub sleep_timeout: std::sync::Mutex<u32>,
+    /// Terminal ids visible to remote (mobile) clients
+    pub remote_allowed: std::sync::Mutex<std::collections::HashSet<String>>,
     pub buffer_manager: std::sync::Mutex<BufferManager>,
     /// Server-side vt100 screen per terminal — yields a clean current-screen
     /// snapshot for freshly-attached mobile clients (see screen.rs).
@@ -63,6 +68,8 @@ pub(crate) struct DaemonState {
     /// access can be told apart and revoked per-device instead of only ever
     /// sharing the one static ws_token.
     pub approved_devices: std::sync::Mutex<Vec<ApprovedDevice>>,
+    /// Tokens that currently have an active WebSocket connection.
+    pub connected_devices: std::sync::Mutex<std::collections::HashSet<String>>,
 }
 
 #[derive(Clone)]
@@ -70,13 +77,20 @@ pub(crate) struct PendingPair {
     pub code: String,
     pub requested_at: std::time::Instant,
     pub approved_token: Option<String>,
+    pub user_agent: Option<String>,
 }
 
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
 pub(crate) struct ApprovedDevice {
     pub token: String,
     pub label: String,
     pub approved_at: i64,
+    #[serde(default)]
+    pub last_seen: Option<i64>,
+    #[serde(default)]
+    pub device_type: Option<String>,
+    #[serde(default)]
+    pub note: String,
 }
 
 pub(crate) const PAIR_EXPIRY_SECS: u64 = 300;
@@ -196,6 +210,11 @@ fn main() {
         active_clients: std::sync::Mutex::new(std::collections::HashMap::new()),
         pending_pairs: std::sync::Mutex::new(std::collections::HashMap::new()),
         approved_devices: std::sync::Mutex::new(load_approved_devices()),
+        connected_devices: std::sync::Mutex::new(std::collections::HashSet::new()),
+        auto_approve: std::sync::Mutex::new(false),
+        sleep_never: std::sync::Mutex::new(true),
+        sleep_timeout: std::sync::Mutex::new(0),
+        remote_allowed: std::sync::Mutex::new(std::collections::HashSet::new()),
     });
 
     eprintln!("termhostd started on {}", PIPE_NAME);
@@ -233,6 +252,7 @@ async fn daemon_main(state: Arc<DaemonState>) {
             state_exit.screen_manager.lock().unwrap().remove(&id);
             state_exit.terminal_infos.lock().unwrap().retain(|t| t.id != id);
             state_exit.terminal_sizes.lock().unwrap().remove(&id);
+            state_exit.remote_allowed.lock().unwrap().remove(&id);
             state_exit.activity.notify_one();
         },
     )
@@ -268,6 +288,7 @@ async fn daemon_main(state: Arc<DaemonState>) {
             workspace: String::new(),
         });
         state.terminal_sizes.lock().unwrap().insert(t.id.clone(), (t.cols, t.rows));
+        state.remote_allowed.lock().unwrap().insert(t.id.clone());
         state.buffer_manager.lock().unwrap().create(&t.id);
         state.screen_manager.lock().unwrap().create(&t.id, t.rows, t.cols);
     }
@@ -292,6 +313,7 @@ async fn daemon_main(state: Arc<DaemonState>) {
         if !already {
             let (h, addr) = ws_server::start(port, state.clone());
             *state.ws_handle.lock().unwrap() = Some(h);
+            *state.ws_port.lock().unwrap() = Some(port);
             sleep_blocker::prevent_system_sleep(true);
             eprintln!("WS server auto-started on {}", addr);
         }
@@ -472,6 +494,7 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
                     // — only add bookkeeping the first time we see this id.
                     let already_known = state.terminal_infos.lock().unwrap().iter().any(|t| t.id == id);
                     if !already_known {
+                        state.remote_allowed.lock().unwrap().insert(id.clone());
                         state.terminal_infos.lock().unwrap().push(TerminalInfo {
                             id: id.clone(),
                             label,
@@ -522,6 +545,7 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
             if let Ok(mut sizes) = state.terminal_sizes.lock() {
                 sizes.remove(&id);
             }
+            state.remote_allowed.lock().unwrap().remove(&id);
             for w in state.workspace_data.lock().unwrap().iter_mut() {
                 w.terminal_ids.retain(|tid| tid != &id);
             }
@@ -543,6 +567,7 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
         DaemonRequest::ListTerminals { seq } => {
             let mut terminals = state.terminal_infos.lock().unwrap().clone();
             let ws_data = state.workspace_data.lock().unwrap();
+            let allowed = state.remote_allowed.lock().unwrap();
             for t in &mut terminals {
                 for ws in ws_data.iter() {
                     if ws.terminal_ids.contains(&t.id) {
@@ -550,6 +575,7 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
                         break;
                     }
                 }
+                t.allow_remote = allowed.contains(&t.id);
             }
             Some(DaemonResponse::TerminalList { seq, terminals })
         }
@@ -589,6 +615,121 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
         }
         DaemonRequest::SyncWorkspaces { seq, workspaces, .. } => {
             *state.workspace_data.lock().unwrap() = workspaces;
+            Some(DaemonResponse::Ok { seq })
+        }
+        DaemonRequest::PendingPairs { seq } => {
+            let pending = state.pending_pairs.lock().unwrap();
+            let pairs: Vec<PendingPairInfo> = pending.iter()
+                .filter(|(_, p)| p.approved_token.is_none())
+                .map(|(id, p)| PendingPairInfo {
+                    device_id: id.clone(),
+                    code: p.code.clone(),
+                })
+                .collect();
+            Some(DaemonResponse::PendingPairsResult { seq, pairs })
+        }
+        DaemonRequest::PairApprove { seq, device_id, label } => {
+            let token = ws_server::generate_device_token();
+            let device_type = state.pending_pairs.lock().unwrap().get(&device_id)
+                .and_then(|p| p.user_agent.clone())
+                .map(|ua| {
+                    let short = if ua.contains("Android") { "Android" }
+                        else if ua.contains("iPhone") || ua.contains("iPad") { "iOS" }
+                        else if ua.contains("CrOS") { "ChromeOS" }
+                        else if ua.contains("Linux") { "Linux" }
+                        else if ua.contains("Windows") { "Windows" }
+                        else if ua.contains("Mac OS") { "macOS" }
+                        else { "Unknown" };
+                    let browser = if ua.contains("Chrome") { "Chrome" }
+                        else if ua.contains("Firefox") { "Firefox" }
+                        else if ua.contains("Safari") { "Safari" }
+                        else if ua.contains("Edge") { "Edge" }
+                        else { "Browser" };
+                    format!("{browser} · {short}")
+                });
+            {
+                let mut pending = state.pending_pairs.lock().unwrap();
+                match pending.get_mut(&device_id) {
+                    Some(p) => p.approved_token = Some(token.clone()),
+                    None => return Some(DaemonResponse::Error { seq, message: "not found or expired".into() }),
+                }
+            }
+            let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0);
+            let mut devices = state.approved_devices.lock().unwrap();
+            devices.push(ApprovedDevice { token, label, approved_at: now_ms, last_seen: None, device_type, note: String::new() });
+            save_approved_devices(&devices);
+            Some(DaemonResponse::Ok { seq })
+        }
+        DaemonRequest::PairReject { seq, device_id } => {
+            state.pending_pairs.lock().unwrap().remove(&device_id);
+            Some(DaemonResponse::Ok { seq })
+        }
+        DaemonRequest::ListDevices { seq } => {
+            let devices = state.approved_devices.lock().unwrap();
+            let connected = state.connected_devices.lock().unwrap();
+            let list: Vec<ApprovedDeviceInfo> = devices.iter().map(|d| ApprovedDeviceInfo {
+                token: d.token.clone(),
+                label: d.label.clone(),
+                approved_at: d.approved_at,
+                last_seen: d.last_seen,
+                device_type: d.device_type.clone(),
+                note: d.note.clone(),
+                online: connected.contains(&d.token),
+            }).collect();
+            Some(DaemonResponse::ListDevicesResult { seq, devices: list })
+        }
+        DaemonRequest::RevokeDevice { seq, token } => {
+            let mut devices = state.approved_devices.lock().unwrap();
+            devices.retain(|d| d.token != token);
+            save_approved_devices(&devices);
+            Some(DaemonResponse::Ok { seq })
+        }
+        DaemonRequest::RenameDevice { seq, token, label } => {
+            let mut devices = state.approved_devices.lock().unwrap();
+            if let Some(d) = devices.iter_mut().find(|d| d.token == token) {
+                d.label = label;
+                save_approved_devices(&devices);
+                Some(DaemonResponse::Ok { seq })
+            } else {
+                Some(DaemonResponse::Error { seq, message: "device not found".into() })
+            }
+        }
+        DaemonRequest::UpdateDeviceNote { seq, token, note } => {
+            let mut devices = state.approved_devices.lock().unwrap();
+            if let Some(d) = devices.iter_mut().find(|d| d.token == token) {
+                d.note = note;
+                save_approved_devices(&devices);
+                Some(DaemonResponse::Ok { seq })
+            } else {
+                Some(DaemonResponse::Error { seq, message: "device not found".into() })
+            }
+        }
+        DaemonRequest::SetAutoApprove { seq, enabled } => {
+            *state.auto_approve.lock().unwrap() = enabled;
+            Some(DaemonResponse::Ok { seq })
+        }
+        DaemonRequest::GetAutoApprove { seq } => {
+            let enabled = *state.auto_approve.lock().unwrap();
+            Some(DaemonResponse::AutoApproveStatus { seq, enabled })
+        }
+        DaemonRequest::SetSleepConfig { seq, never, timeout_minutes } => {
+            *state.sleep_never.lock().unwrap() = never;
+            *state.sleep_timeout.lock().unwrap() = timeout_minutes;
+            sleep_blocker::set_config(never, timeout_minutes);
+            Some(DaemonResponse::Ok { seq })
+        }
+        DaemonRequest::GetSleepConfig { seq } => {
+            let never = *state.sleep_never.lock().unwrap();
+            let timeout_minutes = *state.sleep_timeout.lock().unwrap();
+            Some(DaemonResponse::SleepConfigStatus { seq, never, timeout_minutes })
+        }
+        DaemonRequest::SetTerminalRemote { seq, id, allowed } => {
+            let mut allowed_set = state.remote_allowed.lock().unwrap();
+            if allowed {
+                allowed_set.insert(id);
+            } else {
+                allowed_set.remove(&id);
+            }
             Some(DaemonResponse::Ok { seq })
         }
     }

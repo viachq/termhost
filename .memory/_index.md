@@ -8,6 +8,7 @@
 - [daemon-architecture.md](architecture/daemon-architecture.md) — sidecar PTY daemon, named pipe IPC, reconnect flow, Cargo workspace
 - [tech-stack.md](architecture/tech-stack.md) — Tauri 2 + React + TypeScript + Zustand + CSS Modules
 - [split-tree-layout.md](architecture/split-tree-layout.md) — binary tree pane layout, zoom/maximize, focus nav, resize
+- [android-app.md](architecture/android-app.md) — native Android app with Foreground Service + WebView
 
 ## decisions/
 
@@ -31,3 +32,8 @@
 - [workspace-model.md](domain/workspace-model.md) — workspace, pane, split, theme concepts
 - [mobile-remote-access.md](domain/mobile-remote-access.md) — mobile web client, WS server, rendering fix plan, Tailscale setup
 - [similar-projects.md](domain/similar-projects.md) — tmux, cmux, wmux, BridgeSpace context [?]
+
+## references/
+
+- [adb-wireless-debugging.md](../adb-wireless-debugging.md) — ADB wireless timeout fix (root project)
+- [youtube-transcript](../.config/opencode/skills/youtube-transcript/) — YouTube transcript skill with summarize.py

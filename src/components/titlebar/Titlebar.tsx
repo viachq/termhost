@@ -16,6 +16,8 @@ export default function Titlebar({ onSwitchWorkspace, onNewWorkspace, onDeleteWo
   const updateWorkspace = useWorkspaceStore((st) => st.updateWorkspace);
   const explorerOpen = usePanelStore((st) => st.explorerOpen);
   const toggleExplorer = usePanelStore((st) => st.toggleExplorer);
+  const setActiveView = usePanelStore((st) => st.setActiveView);
+  const activeView = usePanelStore((st) => st.activeView);
 
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -59,6 +61,15 @@ export default function Titlebar({ onSwitchWorkspace, onNewWorkspace, onDeleteWo
 
   return (
     <div className={s.titlebar}>
+      <button
+        className={`${s.homeBtn} ${activeView === "dashboard" ? s.homeBtnActive : ""}`}
+        onClick={() => setActiveView("dashboard")}
+        title="Dashboard"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+        </svg>
+      </button>
       <div className={s.tabs}>
         {workspaces.map((ws, idx) => {
           const isActive = idx === activeIdx;

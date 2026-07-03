@@ -167,6 +167,140 @@ async fn daemon_status(state: State<'_, AppState>) -> Result<serde_json::Value, 
     }
 }
 
+#[tauri::command]
+async fn get_pending_pairs(state: State<'_, AppState>) -> Result<Vec<serde_json::Value>, String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::PendingPairs { seq }).await?;
+    match resp {
+        DaemonResponse::PendingPairsResult { pairs, .. } => {
+            Ok(pairs.into_iter().map(|p| serde_json::json!({"deviceId": p.device_id, "code": p.code})).collect())
+        }
+        _ => Ok(vec![]),
+    }
+}
+
+#[tauri::command]
+async fn pair_approve(state: State<'_, AppState>, device_id: String, label: String) -> Result<(), String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::PairApprove { seq, device_id, label }).await?;
+    match resp {
+        DaemonResponse::Ok { .. } => Ok(()),
+        _ => Err("approve failed".into()),
+    }
+}
+
+#[tauri::command]
+async fn pair_reject(state: State<'_, AppState>, device_id: String) -> Result<(), String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::PairReject { seq, device_id }).await?;
+    match resp {
+        DaemonResponse::Ok { .. } => Ok(()),
+        _ => Err("reject failed".into()),
+    }
+}
+
+#[tauri::command]
+async fn list_devices(state: State<'_, AppState>) -> Result<Vec<serde_json::Value>, String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::ListDevices { seq }).await?;
+    match resp {
+        DaemonResponse::ListDevicesResult { devices, .. } => {
+            Ok(devices.into_iter().map(|d| serde_json::json!({
+                "token": d.token,
+                "label": d.label,
+                "approvedAt": d.approved_at,
+                "lastSeen": d.last_seen,
+                "deviceType": d.device_type,
+                "note": d.note,
+                "online": d.online,
+            })).collect())
+        }
+        _ => Ok(vec![]),
+    }
+}
+
+#[tauri::command]
+async fn update_device_note(state: State<'_, AppState>, token: String, note: String) -> Result<(), String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::UpdateDeviceNote { seq, token, note }).await?;
+    match resp {
+        DaemonResponse::Ok { .. } => Ok(()),
+        _ => Err("update note failed".into()),
+    }
+}
+
+#[tauri::command]
+async fn rename_device(state: State<'_, AppState>, token: String, label: String) -> Result<(), String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::RenameDevice { seq, token, label }).await?;
+    match resp {
+        DaemonResponse::Ok { .. } => Ok(()),
+        _ => Err("rename failed".into()),
+    }
+}
+
+#[tauri::command]
+async fn revoke_device(state: State<'_, AppState>, token: String) -> Result<(), String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::RevokeDevice { seq, token }).await?;
+    match resp {
+        DaemonResponse::Ok { .. } => Ok(()),
+        _ => Err("revoke failed".into()),
+    }
+}
+
+#[tauri::command]
+async fn set_auto_approve(state: State<'_, AppState>, enabled: bool) -> Result<(), String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::SetAutoApprove { seq, enabled }).await?;
+    match resp {
+        DaemonResponse::Ok { .. } => Ok(()),
+        _ => Err("set auto-approve failed".into()),
+    }
+}
+
+#[tauri::command]
+async fn get_auto_approve(state: State<'_, AppState>) -> Result<bool, String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::GetAutoApprove { seq }).await?;
+    match resp {
+        DaemonResponse::AutoApproveStatus { enabled, .. } => Ok(enabled),
+        _ => Ok(false),
+    }
+}
+
+#[tauri::command]
+async fn set_sleep_config(state: State<'_, AppState>, never: bool, timeout_minutes: u32) -> Result<(), String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::SetSleepConfig { seq, never, timeout_minutes }).await?;
+    match resp {
+        DaemonResponse::Ok { .. } => Ok(()),
+        _ => Err("set sleep config failed".into()),
+    }
+}
+
+#[tauri::command]
+async fn set_terminal_remote(state: State<'_, AppState>, id: String, allowed: bool) -> Result<(), String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::SetTerminalRemote { seq, id, allowed }).await?;
+    match resp {
+        DaemonResponse::Ok { .. } => Ok(()),
+        _ => Err("set terminal remote failed".into()),
+    }
+}
+
+#[tauri::command]
+async fn get_sleep_config(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let seq = state.daemon.next_seq();
+    let resp = state.daemon.request(&DaemonRequest::GetSleepConfig { seq }).await?;
+    match resp {
+        DaemonResponse::SleepConfigStatus { never, timeout_minutes, .. } => {
+            Ok(serde_json::json!({ "never": never, "timeoutMinutes": timeout_minutes }))
+        }
+        _ => Ok(serde_json::json!({ "never": true, "timeoutMinutes": 0 })),
+    }
+}
+
 #[derive(Serialize)]
 struct FileEntry {
     name: String,
@@ -566,6 +700,18 @@ pub fn run() {
             ws_server_status,
 
             sync_workspaces,
+            get_pending_pairs,
+            pair_approve,
+            pair_reject,
+            list_devices,
+            revoke_device,
+            rename_device,
+            update_device_note,
+            set_auto_approve,
+            get_auto_approve,
+            set_sleep_config,
+            get_sleep_config,
+            set_terminal_remote,
             browser_open,
             browser_navigate,
             browser_resize,

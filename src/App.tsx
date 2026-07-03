@@ -6,6 +6,8 @@ import ExplorerPanel from "./components/panels/ExplorerPanel";
 import TranslateTooltip from "./components/translate/TranslateTooltip";
 import CloseDialog from "./components/titlebar/CloseDialog";
 import WorkspaceEditor from "./components/pages/WorkspaceEditor";
+import PairingPage from "./components/pages/PairingPage";
+import Dashboard from "./components/pages/Dashboard";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { usePinchZoom } from "./hooks/usePinchZoom";
 import { useSettingsStore } from "./store/settingsStore";
@@ -469,9 +471,10 @@ export default function App() {
         onNewWorkspace={handleNewWorkspace}
         onDeleteWorkspace={handleDeleteWorkspace}
       />}
-      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+          <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           <div style={{ flex: 1, display: "flex", position: "relative", overflow: "hidden" }}>
+            {activeView === "dashboard" && <Dashboard />}
             {activeView === "terminals" && workspaces.map((_, wsIdx) => {
               const tree = workspaceTrees.get(wsIdx);
               if (!tree) return null;
@@ -503,6 +506,9 @@ export default function App() {
             )}
             {activeView === "workspace-editor" && (
               <WorkspaceEditor editIdx={null} onSave={handleWorkspaceSaved} />
+            )}
+            {activeView === "pairing" && (
+              <PairingPage />
             )}
             {searchVisible && <SearchBar onClose={toggleSearch} />}
           </div>

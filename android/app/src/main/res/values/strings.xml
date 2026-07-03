@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">termhost</string>
+    <string name="daemon_channel_name">Daemon Service</string>
+    <string name="daemon_channel_desc">Keep terminal daemon alive</string>
+    <string name="daemon_notif_text">Terminal daemon is running</string>
+</resources>

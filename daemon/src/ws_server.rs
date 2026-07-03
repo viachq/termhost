@@ -95,20 +95,10 @@ fn generate_device_id() -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-fn generate_device_token() -> String {
+pub(crate) fn generate_device_token() -> String {
     let mut bytes = [0u8; 16];
     let _ = getrandom::getrandom(&mut bytes);
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
-}
-
-/// Injects the per-process token into the served page so the phone
-/// connects without the user typing anything.
-fn inject_token(html: String, token: &str) -> String {
-    let script = format!("<script>window.__WS_TOKEN__=\"{}\";</script>", token);
-    match html.find("</head>") {
-        Some(pos) => format!("{}{}{}", &html[..pos], script, &html[pos..]),
-        None => format!("{}{}", script, html),
-    }
 }
 
 /// JSON shape sent to mobile for a terminal, including its canonical PTY grid.
@@ -196,8 +186,6 @@ impl WsServerHandle {
 pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
 
-    let token = state.ws_token.clone();
-
     // PWA static assets: manifest, service worker, home-screen icons. These live
     // in dist-mobile/ alongside mobile.html (copied there by Vite's publicDir)
     // but — unlike mobile.html — must stay separate fetchable files: a service
@@ -218,11 +206,13 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
         },
     );
 
-    let html_token = token.clone();
+    // No token injected here on purpose — a fresh visitor (no token in
+    // localStorage/URL) is meant to land on the pairing flow, not get the
+    // legacy shared token for free. See ConnectScreen.tsx's PairingFlow.
     let html_route = warp::path::end()
         .map(move || {
             warp::reply::with_header(
-                warp::reply::html(inject_token(load_mobile_html(), &html_token)),
+                warp::reply::html(load_mobile_html()),
                 "cache-control",
                 "no-store, no-cache, must-revalidate",
             )
@@ -234,9 +224,10 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
         .and(warp::ws())
         .and_then(move |q: TokenQuery, ws: warp::ws::Ws| {
             let s = st.clone();
+            let token = q.token.clone();
             async move {
-                if s.is_valid_token(q.token.as_deref()) {
-                    Ok::<_, warp::Rejection>(ws.on_upgrade(move |socket| handle_ws(socket, s)))
+                if s.is_valid_token(token.as_deref()) {
+                    Ok::<_, warp::Rejection>(ws.on_upgrade(move |socket| handle_ws(socket, s, token)))
                 } else {
                     Err(warp::reject::not_found())
                 }
@@ -626,15 +617,51 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
     let pair_request_state = state.clone();
     let api_pair_request = warp::path("api").and(warp::path("pair")).and(warp::path("request")).and(warp::path::end())
         .and(warp::post())
-        .map(move || {
+        .and(warp::header::optional::<String>("User-Agent"))
+        .map(move |ua: Option<String>| {
             let device_id = generate_device_id();
             let code = generate_pair_code();
-            pair_request_state.pending_pairs.lock().unwrap().insert(device_id.clone(), crate::PendingPair {
-                code: code.clone(),
-                requested_at: std::time::Instant::now(),
-                approved_token: None,
-            });
-            warp::reply::json(&serde_json::json!({"deviceId": device_id, "code": code}))
+            let auto = *pair_request_state.auto_approve.lock().unwrap();
+            if auto {
+                let token = generate_device_token();
+                let device_type = ua.clone().map(|ua| {
+                    let short = if ua.contains("Android") { "Android" }
+                        else if ua.contains("iPhone") || ua.contains("iPad") { "iOS" }
+                        else if ua.contains("CrOS") { "ChromeOS" }
+                        else if ua.contains("Linux") { "Linux" }
+                        else if ua.contains("Windows") { "Windows" }
+                        else if ua.contains("Mac OS") { "macOS" }
+                        else { "Unknown" };
+                    let browser = if ua.contains("Chrome") { "Chrome" }
+                        else if ua.contains("Firefox") { "Firefox" }
+                        else if ua.contains("Safari") { "Safari" }
+                        else if ua.contains("Edge") { "Edge" }
+                        else { "Browser" };
+                    format!("{browser} · {short}")
+                });
+                let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0);
+                let mut devices = pair_request_state.approved_devices.lock().unwrap();
+                devices.push(crate::ApprovedDevice {
+                    token: token.clone(), label: "Phone".into(), approved_at: now_ms,
+                    last_seen: None, device_type, note: String::new(),
+                });
+                crate::save_approved_devices(&devices);
+                pair_request_state.pending_pairs.lock().unwrap().insert(device_id.clone(), crate::PendingPair {
+                    code: code.clone(),
+                    requested_at: std::time::Instant::now(),
+                    approved_token: Some(token),
+                    user_agent: ua,
+                });
+                warp::reply::json(&serde_json::json!({"deviceId": device_id, "code": code, "autoApproved": true}))
+            } else {
+                pair_request_state.pending_pairs.lock().unwrap().insert(device_id.clone(), crate::PendingPair {
+                    code: code.clone(),
+                    requested_at: std::time::Instant::now(),
+                    approved_token: None,
+                    user_agent: ua,
+                });
+                warp::reply::json(&serde_json::json!({"deviceId": device_id, "code": code}))
+            }
         });
 
     let pair_poll_state = state.clone();
@@ -686,6 +713,23 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
             }
             let new_token = generate_device_token();
             let label = q.label.unwrap_or_else(|| "Phone".to_string());
+            let device_type = pair_approve_state.pending_pairs.lock().unwrap().get(&q.device_id)
+                .and_then(|p| p.user_agent.clone())
+                .map(|ua| {
+                    let short = if ua.contains("Android") { "Android" }
+                        else if ua.contains("iPhone") || ua.contains("iPad") { "iOS" }
+                        else if ua.contains("CrOS") { "ChromeOS" }
+                        else if ua.contains("Linux") { "Linux" }
+                        else if ua.contains("Windows") { "Windows" }
+                        else if ua.contains("Mac OS") { "macOS" }
+                        else { "Unknown" };
+                    let browser = if ua.contains("Chrome") { "Chrome" }
+                        else if ua.contains("Firefox") { "Firefox" }
+                        else if ua.contains("Safari") { "Safari" }
+                        else if ua.contains("Edge") { "Edge" }
+                        else { "Browser" };
+                    format!("{browser} · {short}")
+                });
             {
                 let mut pending = pair_approve_state.pending_pairs.lock().unwrap();
                 match pending.get_mut(&q.device_id) {
@@ -698,7 +742,7 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
             }
             let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0);
             let mut devices = pair_approve_state.approved_devices.lock().unwrap();
-            devices.push(crate::ApprovedDevice { token: new_token, label, approved_at: now_ms });
+            devices.push(crate::ApprovedDevice { token: new_token, label, approved_at: now_ms, last_seen: None, device_type, note: String::new() });
             crate::save_approved_devices(&devices);
             warp::reply::with_status(warp::reply::json(&serde_json::json!({"ok": true})), warp::http::StatusCode::OK)
         });
@@ -724,10 +768,15 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
                 return warp::reply::with_status(warp::reply::json(&serde_json::json!({"error":"unauthorized"})), warp::http::StatusCode::UNAUTHORIZED);
             }
             let devices = devices_list_state.approved_devices.lock().unwrap();
+            let connected = devices_list_state.connected_devices.lock().unwrap();
             let list: Vec<serde_json::Value> = devices.iter().map(|d| serde_json::json!({
                 "label": d.label,
                 "approvedAt": d.approved_at,
                 "deviceToken": d.token,
+                "lastSeen": d.last_seen,
+                "deviceType": d.device_type,
+                "note": d.note,
+                "online": connected.contains(&d.token),
             })).collect();
             warp::reply::with_status(warp::reply::json(&list), warp::http::StatusCode::OK)
         });
@@ -767,7 +816,12 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
         .or(api_devices_list)
         .or(api_devices_revoke);
 
-    let (_, server) = warp::serve(routes)
+    let cors = warp::cors()
+        .allow_any_origin()
+        .allow_methods(vec!["GET", "POST"])
+        .allow_headers(vec!["content-type"]);
+
+    let (_, server) = warp::serve(routes.with(cors))
         .bind_with_graceful_shutdown(([0, 0, 0, 0], port), async {
             let _ = shutdown_rx.await;
         });
@@ -779,15 +833,24 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
     (WsServerHandle { shutdown_tx }, addr)
 }
 
-async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>) {
+async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Option<String>) {
+    // Track this device as connected
+    if let Some(ref t) = token {
+        state.connected_devices.lock().unwrap().insert(t.clone());
+    }
+
     let (mut ws_tx, mut ws_rx) = ws.split();
 
+    let allowed_ids = state.remote_allowed.lock().unwrap().clone();
     let infos_msg = {
         let infos = state.terminal_infos.lock().unwrap();
         let sizes = state.terminal_sizes.lock().unwrap();
-        let simple: Vec<serde_json::Value> = infos.iter().map(|t| term_to_json(t, &sizes)).collect();
+        let simple: Vec<serde_json::Value> = infos.iter()
+            .filter(|t| allowed_ids.contains(&t.id))
+            .map(|t| term_to_json(t, &sizes)).collect();
         serde_json::json!({"type": "terminals", "data": simple}).to_string()
     };
+    drop(allowed_ids);
     let _ = ws_tx.send(warp::ws::Message::text(infos_msg)).await;
 
     let mut broadcast_rx = state.broadcast_tx.subscribe();
@@ -871,36 +934,9 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>) {
                         }
                     }
                     Some("resize") => {
-                        // Size-gate: only the active client (last to send input) may
-                        // resize the PTY. If "desktop" is active, the phone follows by
-                        // CSS-scaling the canonical grid instead of fighting.
-                        if let (Some(id), Some(cols), Some(rows)) =
-                            (v["id"].as_str(), v["cols"].as_u64(), v["rows"].as_u64())
-                        {
-                            let claim = v["claim"].as_bool().unwrap_or(false);
-                            let active = state.active_clients.lock().unwrap().get(id).cloned();
-                            let is_active = active.as_deref() == Some("ws") || active.is_none();
-                            if !is_active && !claim {
-                                // Send rejection so the phone knows to CSS-scale
-                                // rather than keep its local xterm at a wrong size.
-                                let rej = serde_json::json!({"type":"resize_rejected","id":id}).to_string();
-                                let mut tx = ws_tx.lock().await;
-                                let _ = tx.send(warp::ws::Message::text(rej)).await;
-                                continue;
-                            }
-                            let cols = cols as u16;
-                            let rows = rows as u16;
-                            state.active_clients.lock().unwrap().insert(id.to_string(), "ws".to_string());
-                            if state.pty().resize(id, cols, rows).await.is_ok() {
-                                state.terminal_sizes.lock().unwrap().insert(id.to_string(), (cols, rows));
-                                state.screen_manager.lock().unwrap().resize(id, rows, cols);
-                                let _ = state.broadcast_tx.send(crate::BroadcastMsg::TerminalResized {
-                                    id: id.to_string(),
-                                    cols,
-                                    rows,
-                                });
-                            }
-                        }
+                        // Phone wants to resize the PTY — ignored. The PTY has a fixed
+                        // canonical size set by the desktop. The phone's xterm renders
+                        // at that size and CSS-scales to fit its container.
                     }
                     Some("get_buffer") => {
                         if let Some(id) = v["id"].as_str() {
@@ -928,7 +964,10 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>) {
                         let list_msg = {
                             let infos = state.terminal_infos.lock().unwrap();
                             let sizes = state.terminal_sizes.lock().unwrap();
-                            let simple: Vec<serde_json::Value> = infos.iter().map(|t| term_to_json(t, &sizes)).collect();
+                            let allowed = state.remote_allowed.lock().unwrap();
+                            let simple: Vec<serde_json::Value> = infos.iter()
+                                .filter(|t| allowed.contains(&t.id))
+                                .map(|t| term_to_json(t, &sizes)).collect();
                             serde_json::json!({"type":"terminals","data":simple}).to_string()
                         };
                         let mut tx = ws_tx.lock().await;
@@ -983,9 +1022,10 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>) {
                                 let ws_data = state.workspace_data.lock().unwrap();
                                 let infos = state.terminal_infos.lock().unwrap();
                                 let sizes = state.terminal_sizes.lock().unwrap();
+                                let allowed = state.remote_allowed.lock().unwrap();
                                 if let Some(ws) = ws_data.get(idx as usize) {
                                     let filtered: Vec<serde_json::Value> = infos.iter()
-                                        .filter(|t| ws.terminal_ids.contains(&t.id))
+                                        .filter(|t| ws.terminal_ids.contains(&t.id) && allowed.contains(&t.id))
                                         .map(|t| term_to_json(t, &sizes))
                                         .collect();
                                     serde_json::json!({"type":"terminals","data":filtered}).to_string()
@@ -1074,6 +1114,7 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>) {
                                 title: String::new(),
                                 workspace: String::new(),
                             });
+                            state.remote_allowed.lock().unwrap().insert(id.clone());
                             state.terminal_sizes.lock().unwrap().insert(id.clone(), (cols, rows));
                             // Assign to the requested workspace if one exists (clamp to 0);
                             // tolerate a daemon with no workspaces yet (assigned = None).
@@ -1119,13 +1160,15 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>) {
                                     let ws_data = state.workspace_data.lock().unwrap();
                                     let infos = state.terminal_infos.lock().unwrap();
                                     let sizes = state.terminal_sizes.lock().unwrap();
+                                    let allowed = state.remote_allowed.lock().unwrap();
                                     let simple: Vec<serde_json::Value> = match assigned {
                                         Some(ti) => {
                                             let ids = ws_data.get(ti).map(|w| w.terminal_ids.clone()).unwrap_or_default();
-                                            infos.iter().filter(|t| ids.contains(&t.id))
+                                            infos.iter().filter(|t| ids.contains(&t.id) && allowed.contains(&t.id))
                                                 .map(|t| term_to_json(t, &sizes)).collect()
                                         }
-                                        None => infos.iter().map(|t| term_to_json(t, &sizes)).collect(),
+                                        None => infos.iter().filter(|t| allowed.contains(&t.id))
+                                            .map(|t| term_to_json(t, &sizes)).collect(),
                                     };
                                     serde_json::json!({"type":"terminals","data":simple}).to_string()
                                 };
@@ -1141,6 +1184,7 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>) {
                             state.screen_manager.lock().unwrap().remove(id);
                             state.terminal_infos.lock().unwrap().retain(|t| t.id != id);
                             state.terminal_sizes.lock().unwrap().remove(id);
+                            state.remote_allowed.lock().unwrap().remove(id);
                             for w in state.workspace_data.lock().unwrap().iter_mut() {
                                 w.terminal_ids.retain(|tid| tid != id);
                             }
@@ -1149,7 +1193,10 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>) {
                             let list_msg = {
                                 let infos = state.terminal_infos.lock().unwrap();
                                 let sizes = state.terminal_sizes.lock().unwrap();
-                                let simple: Vec<serde_json::Value> = infos.iter().map(|t| term_to_json(t, &sizes)).collect();
+                                let allowed = state.remote_allowed.lock().unwrap();
+                                let simple: Vec<serde_json::Value> = infos.iter()
+                                    .filter(|t| allowed.contains(&t.id))
+                                    .map(|t| term_to_json(t, &sizes)).collect();
                                 serde_json::json!({"type":"terminals","data":simple}).to_string()
                             };
                             let mut tx = ws_tx.lock().await;
@@ -1160,6 +1207,17 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>) {
                 }
             }
         }
+    }
+
+    // Remove from connected devices and update last_seen
+    if let Some(ref t) = token {
+        state.connected_devices.lock().unwrap().remove(t);
+        let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0);
+        let mut devices = state.approved_devices.lock().unwrap();
+        if let Some(d) = devices.iter_mut().find(|d| d.token == *t) {
+            d.last_seen = Some(now_ms);
+        }
+        crate::save_approved_devices(&devices);
     }
 
     fwd.abort();

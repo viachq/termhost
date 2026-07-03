@@ -132,6 +132,18 @@ fn request_seq(req: &DaemonRequest) -> Option<u32> {
         DaemonRequest::WsServerStatus { seq } => Some(*seq),
         DaemonRequest::SyncWorkspaces { seq, .. } => Some(*seq),
         DaemonRequest::Ping { seq } => Some(*seq),
+        DaemonRequest::PendingPairs { seq } => Some(*seq),
+        DaemonRequest::PairApprove { seq, .. } => Some(*seq),
+        DaemonRequest::PairReject { seq, .. } => Some(*seq),
+        DaemonRequest::ListDevices { seq } => Some(*seq),
+        DaemonRequest::RevokeDevice { seq, .. } => Some(*seq),
+        DaemonRequest::RenameDevice { seq, .. } => Some(*seq),
+        DaemonRequest::UpdateDeviceNote { seq, .. } => Some(*seq),
+        DaemonRequest::SetAutoApprove { seq, .. } => Some(*seq),
+        DaemonRequest::GetAutoApprove { seq } => Some(*seq),
+        DaemonRequest::SetSleepConfig { seq, .. } => Some(*seq),
+        DaemonRequest::GetSleepConfig { seq } => Some(*seq),
+        DaemonRequest::SetTerminalRemote { seq, .. } => Some(*seq),
         DaemonRequest::Write { .. } | DaemonRequest::SubscribeAll | DaemonRequest::Shutdown => None,
     }
 }
@@ -146,6 +158,10 @@ fn response_seq(resp: &DaemonResponse) -> Option<u32> {
         DaemonResponse::TerminalList { seq, .. } => Some(*seq),
         DaemonResponse::WsStatus { seq, .. } => Some(*seq),
         DaemonResponse::Pong { seq, .. } => Some(*seq),
+        DaemonResponse::PendingPairsResult { seq, .. } => Some(*seq),
+        DaemonResponse::ListDevicesResult { seq, .. } => Some(*seq),
+        DaemonResponse::AutoApproveStatus { seq, .. } => Some(*seq),
+        DaemonResponse::SleepConfigStatus { seq, .. } => Some(*seq),
         DaemonResponse::Output { .. } | DaemonResponse::TerminalExited { .. } | DaemonResponse::TerminalResized { .. } | DaemonResponse::ShowWindow => None,
     }
 }

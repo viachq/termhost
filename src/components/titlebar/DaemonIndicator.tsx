@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { daemonStatus, shutdownDaemon, restartDaemon, listTerminals, killTerminal, wsServerStatus } from "../../hooks/useTauriIpc";
+import { daemonStatus, shutdownDaemon, restartDaemon, listTerminals, killTerminal, wsServerStatus, getPendingPairs, pairApprove, pairReject } from "../../hooks/useTauriIpc";
 import QRLogin from "../QRLogin";
 import s from "./DaemonIndicator.module.css";
 
@@ -37,8 +37,11 @@ export default function DaemonIndicator() {
   const [protocolMismatch, setProtocolMismatch] = useState(false);
   const [wsIps, setWsIps] = useState<string[]>([]);
   const [wsPort, setWsPort] = useState(0);
+  const [wsToken, setWsToken] = useState("");
+  const [pendingPairs, setPendingPairs] = useState<{ deviceId: string; code: string }[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<number>(0);
+  const pairTimerRef = useRef<number>(0);
 
   const pollStatus = useCallback(async () => {
     try {
@@ -72,10 +75,12 @@ export default function DaemonIndicator() {
       .then((st) => {
         setWsIps(st.ips || []);
         setWsPort(st.port);
+        setWsToken(st.token || "");
       })
       .catch(() => {
         setWsIps([]);
         setWsPort(0);
+        setWsToken("");
       });
 
     const handleClickOutside = (e: MouseEvent) => {
@@ -86,6 +91,36 @@ export default function DaemonIndicator() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [menuOpen]);
+
+  // Poll for devices waiting on approval — only while the menu is open.
+  // Uses Tauri IPC (same-process, no CORS) instead of HTTP fetch.
+  useEffect(() => {
+    if (!menuOpen) {
+      window.clearInterval(pairTimerRef.current);
+      setPendingPairs([]);
+      return;
+    }
+    const poll = async () => {
+      try {
+        const pairs = await getPendingPairs();
+        setPendingPairs(pairs);
+      } catch {
+        // daemon might be briefly unreachable — next tick retries
+      }
+    };
+    poll();
+    pairTimerRef.current = window.setInterval(poll, 2000);
+    return () => window.clearInterval(pairTimerRef.current);
+  }, [menuOpen]);
+
+  const approvePair = async (deviceId: string) => {
+    await pairApprove(deviceId).catch(() => {});
+    setPendingPairs((prev) => prev.filter((p) => p.deviceId !== deviceId));
+  };
+  const rejectPair = async (deviceId: string) => {
+    await pairReject(deviceId).catch(() => {});
+    setPendingPairs((prev) => prev.filter((p) => p.deviceId !== deviceId));
+  };
 
   const handleKillTerminal = async (id: string) => {
     await killTerminal(id).catch(() => {});
@@ -169,6 +204,19 @@ export default function DaemonIndicator() {
               connected ? "Daemon active" : "Daemon disconnected"
             }</span>
           </div>
+
+          {pendingPairs.length > 0 && (
+            <div className={s.pairRequests}>
+              {pendingPairs.map((p) => (
+                <div key={p.deviceId} className={s.pairRow}>
+                  <span className={s.pairCode}>{p.code}</span>
+                  <span className={s.pairLabel}>New device wants to pair</span>
+                  <button className={s.pairApprove} onClick={() => approvePair(p.deviceId)}>Approve</button>
+                  <button className={s.pairReject} onClick={() => rejectPair(p.deviceId)}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {wsPort > 0 && wsIps.length > 0 && (
             <QRLogin ips={wsIps} port={wsPort} />

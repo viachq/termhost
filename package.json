@@ -23,6 +23,7 @@
     "@xterm/xterm": "^5.5.0",
     "d3-force": "^3.0.0",
     "highlight.js": "^11.11.1",
+    "jsqr": "^1.4.0",
     "marked": "^18.0.5",
     "monaco-editor": "^0.52.2",
     "qrcode": "^1.5.4",

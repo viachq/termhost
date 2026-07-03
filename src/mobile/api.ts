@@ -2,14 +2,30 @@
 // authenticates without the user typing anything. In `mobile:dev` (vite dev server,
 // proxying /ws to the real daemon) that injection doesn't happen, so fall back to a
 // `?token=` query param — open the dev URL once with the token and it just works.
+// A third fallback covers pairing (see PairingScreen.tsx): once a device is
+// approved, its per-device token is saved to localStorage so re-launching from
+// the installed PWA's home-screen icon (which always opens the bare "/", no
+// query string) still authenticates without re-pairing every time.
+const PAIRED_TOKEN_KEY = "th-paired-token";
+
 function readDevToken(): string {
   if (typeof window === "undefined") return "";
   return new URLSearchParams(window.location.search).get("token") || "";
 }
 
+function readPairedToken(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(PAIRED_TOKEN_KEY) || "";
+}
+
+export function savePairedToken(token: string) {
+  localStorage.setItem(PAIRED_TOKEN_KEY, token);
+}
+
 export const WS_TOKEN: string =
   (typeof window !== "undefined" && (window as any).__WS_TOKEN__) ||
-  readDevToken();
+  readDevToken() ||
+  readPairedToken();
 
 const tokenParam = WS_TOKEN ? `token=${encodeURIComponent(WS_TOKEN)}` : "";
 

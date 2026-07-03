@@ -8,6 +8,27 @@
   user-select: none;
 }
 
+.homeBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  background: none;
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s;
+}
+.homeBtn:hover {
+  background: var(--bg-surface);
+  color: var(--text-main);
+}
+.homeBtnActive {
+  color: var(--accent);
+}
+
 /* Workspace tabs */
 .tabs {
   display: flex;
