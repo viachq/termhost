@@ -15,7 +15,6 @@ import { useSettingsStore } from "./store/settingsStore";
 import { useWorkspaceStore } from "./store/workspaceStore";
 import { useTerminalStore, terminalRefs, workspaceTrees, getTerminalIdsForWorkspace } from "./store/terminalStore";
 import { usePanelStore } from "./store/panelStore";
-import { useBrowserStore } from "./store/browserStore";
 import { getHomeDir, killTerminal, resizeTerminal } from "./hooks/useTauriIpc";
 import { panesToTree, instantiateTree, splitPaneInTree, removePaneFromTree } from "./hooks/useSplitTree";
 
@@ -452,18 +451,6 @@ export default function App() {
 
   useKeyboardShortcuts(shortcutActions);
   usePinchZoom();
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const url = (e as CustomEvent<string>).detail;
-      if (!url) return;
-      const normalized = url.startsWith("http://") || url.startsWith("https://") ? url : "https://" + url;
-      useBrowserStore.getState().addTab(normalized);
-      usePanelStore.getState().openExplorer("browser");
-    };
-    window.addEventListener("agentworkspace:open-url", handler);
-    return () => window.removeEventListener("agentworkspace:open-url", handler);
-  }, []);
 
   return (
     <div id="app" style={{ display: "flex", flexDirection: "column", height: "100vh" }}>

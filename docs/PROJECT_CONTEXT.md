@@ -1,4 +1,4 @@
-# Agent Workspace
+# Termhost
 
 ## Project Summary
 
@@ -165,21 +165,17 @@ The app is not:
 
 ## Technical Direction
 
-## Current Stack Choice
+## Current Stack
 
-Current MVP direction:
+Current stack:
 
-- `Electron`
-- `React`
-- `xterm.js`
-- `node-pty`
-
-Reason:
-
-- Node and npm are already available in the current environment
-- it is the fastest path to a working desktop MVP
-- `xterm.js + node-pty` is a standard proven stack for embedded terminals
-- the app needs real PTY-backed shells, not a fake console UI
+- **Desktop:** Tauri v2 + Rust
+- **Backend:** Rust daemon (termhostd) — portable-pty + warp HTTP/WS
+- **Frontend:** React 19, TypeScript, Vite, xterm.js (WebGL), Monaco, Zustand
+- **Mobile:** React + xterm.js PWA served by daemon
+- **IPC:** named pipes (app ↔ daemon), WebSocket (clients ↔ daemon)
+- **State:** Zustand stores
+- **Styling:** CSS Modules + Tailwind CSS v4
 
 ## Future Stack Option
 
@@ -224,17 +220,21 @@ What it should improve is workflow speed:
 
 ### Desktop Shell
 
-Electron window hosts the UI and talks to the backend via IPC.
+Tauri window hosts the UI and talks to the daemon via named pipe IPC.
 
 ### Terminal Backend
 
-`node-pty` spawns real shell processes.
+Rust `portable-pty` spawns real shell processes via Windows ConPTY.
 
-Each pane is backed by its own PTY session.
+Each pane is backed by its own PTY session owned by the daemon (termhostd), not the UI window.
 
 ### Terminal Frontend
 
-`xterm.js` renders the terminal UI inside each pane.
+`xterm.js` renders the terminal UI inside each pane with WebGL GPU acceleration.
+
+### Remote Access
+
+The daemon runs a warp HTTP/WS server on :9090 serving a PWA for mobile access.
 
 ### Workspace Model
 
