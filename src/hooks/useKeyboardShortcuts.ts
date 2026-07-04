@@ -163,24 +163,6 @@ export function useKeyboardShortcuts(actions: ShortcutActions) {
         usePanelStore.getState().toggleSearch();
         return;
       }
-      // Ctrl+Shift+K — toggle translate
-      if (key === "k" && e.shiftKey) {
-        e.preventDefault();
-        usePanelStore.getState().toggleTranslate();
-        return;
-      }
-      // Ctrl+Shift+L — toggle browser
-      if (key === "l" && e.shiftKey) {
-        e.preventDefault();
-        usePanelStore.getState().toggleExplorer("browser");
-        return;
-      }
-      // Ctrl+G — toggle note graph
-      if (key === "g" && !e.shiftKey) {
-        e.preventDefault();
-        usePanelStore.getState().toggleExplorer("graph");
-        return;
-      }
       // Ctrl+= / Ctrl+- / Ctrl+0 — zoom
       if (key === "=" || key === "+") {
         e.preventDefault();

@@ -1,29 +1,18 @@
-import { useCallback, useRef, useEffect, type ReactNode } from "react";
+import { useCallback, useRef, type ReactNode } from "react";
 import { usePanelStore, type ExplorerTab } from "../../store/panelStore";
 import { useFileViewerStore } from "../../store/fileViewerStore";
-import { browserHide } from "../../hooks/useTauriIpc";
 import FilesContent from "./FilesContent";
-import BrowserPanel from "./BrowserPanel";
-import TranslatePanel from "./TranslatePanel";
-import McpPanel from "./McpPanel";
 import SettingsPanel from "./SettingsPanel";
-import SshPanel from "./SshPanel";
 import GitPanel from "./GitPanel";
 import PairingPanel from "./PairingPanel";
 import FileViewer from "../fileviewer/FileViewer";
-import NoteGraph from "../graph/NoteGraph";
 import s from "./Panels.module.css";
 
 function renderTabContent(tab: ExplorerTab): ReactNode {
   switch (tab) {
     case "files": return <FilesContent />;
     case "preview": return <FileViewer />;
-    case "browser": return <BrowserPanel embedded />;
-    case "graph": return <NoteGraph embedded />;
     case "git": return <GitPanel embedded />;
-    case "translate": return <TranslatePanel embedded />;
-    case "ssh": return <SshPanel embedded />;
-    case "mcp": return <McpPanel embedded />;
     case "pairing": return <PairingPanel embedded />;
     case "settings": return <SettingsPanel embedded />;
   }
@@ -41,34 +30,9 @@ const TABS: { key: ExplorerTab; label: string; icon: string }[] = [
     icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
   },
   {
-    key: "browser",
-    label: "Browser",
-    icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><ellipse cx="12" cy="12" rx="4" ry="10"/><path d="M2 12h20"/></svg>',
-  },
-  {
-    key: "graph",
-    label: "Graph",
-    icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="19" r="2.5"/><line x1="8" y1="7" x2="10.5" y2="17"/><line x1="16" y1="7" x2="13.5" y2="17"/><line x1="8.5" y1="6" x2="15.5" y2="6"/></svg>',
-  },
-  {
     key: "git",
     label: "Git",
     icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M6 8.5v7M8 7l7.5 4M8 17l7.5-4"/></svg>',
-  },
-  {
-    key: "translate",
-    label: "Translate",
-    icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h7M9 3v2M6 5c.6 3.5 2.7 6.5 5 8.5M7 15l4-4"/><path d="M13.5 9l4.5 12M15.7 15h4.6"/></svg>',
-  },
-  {
-    key: "ssh",
-    label: "SSH",
-    icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="3"/><path d="M7 8l3 3-3 3M12 16h5"/></svg>',
-  },
-  {
-    key: "mcp",
-    label: "MCP",
-    icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><path d="M14 14h8v8h-8z" opacity="0.5"/><circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="18" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="6" cy="18" r="1.5" fill="currentColor" stroke="none"/></svg>',
   },
   {
     key: "pairing",
@@ -95,15 +59,7 @@ export default function ExplorerPanel() {
   const fileTabs = useFileViewerStore((st) => st.fileTabs);
   const dragRef = useRef(false);
   const splitDragRef = useRef(false);
-  const prevTabRef = useRef(explorerTab);
   const contentRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (prevTabRef.current === "browser" && explorerTab !== "browser") {
-      browserHide().catch(() => {});
-    }
-    prevTabRef.current = explorerTab;
-  }, [explorerTab]);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

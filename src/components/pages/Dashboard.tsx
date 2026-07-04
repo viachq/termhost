@@ -3,12 +3,7 @@ import { usePanelStore } from "../../store/panelStore";
 import { wsServerStatus, listDevices } from "../../hooks/useTauriIpc";
 import FilesContent from "../panels/FilesContent";
 import FileViewer from "../fileviewer/FileViewer";
-import BrowserPanel from "../panels/BrowserPanel";
-import TranslatePanel from "../panels/TranslatePanel";
-import McpPanel from "../panels/McpPanel";
-import SshPanel from "../panels/SshPanel";
 import GitPanel from "../panels/GitPanel";
-import NoteGraph from "../graph/NoteGraph";
 import SettingsPanel from "../panels/SettingsPanel";
 import PairingFull from "./PairingPage";
 
@@ -35,12 +30,7 @@ const TABS: TabDef[] = [
       </div>
     </div>
   ) },
-  { key: "browser", label: "Browser", desc: "Embedded browser", icon: <S16M><circle cx="12" cy="12" r="10"/><ellipse cx="12" cy="12" rx="4" ry="10"/><path d="M2 12h20"/></S16M>, render: () => <BrowserPanel embedded /> },
-  { key: "graph", label: "Graph", desc: "Note graph", icon: <S16M><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="19" r="2.5"/><line x1="8" y1="7" x2="10.5" y2="17"/><line x1="16" y1="7" x2="13.5" y2="17"/></S16M>, render: () => <NoteGraph embedded /> },
   { key: "git", label: "Git", desc: "Git status & diff", icon: <S16M><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M6 8.5v7M8 7l7.5 4M8 17l7.5-4"/></S16M>, render: () => <GitPanel embedded /> },
-  { key: "translate", label: "Translate", desc: "Translate tooltip", icon: <S16M><path d="M4 5h7M9 3v2M6 5c.6 3.5 2.7 6.5 5 8.5M7 15l4-4"/><path d="M13.5 9l4.5 12M15.7 15h4.6"/></S16M>, render: () => <TranslatePanel embedded /> },
-  { key: "ssh", label: "SSH", desc: "SSH connections", icon: <S16M><rect x="2" y="2" width="20" height="20" rx="3"/><path d="M7 8l3 3-3 3M12 16h5"/></S16M>, render: () => <SshPanel embedded /> },
-  { key: "mcp", label: "MCP", desc: "MCP servers", icon: <S16M><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><path d="M14 14h8v8h-8z" opacity="0.5"/><circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="18" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="6" cy="18" r="1.5" fill="currentColor" stroke="none"/></S16M>, render: () => <McpPanel embedded /> },
 ];
 
 function renderTab(key: string): ReactNode {
