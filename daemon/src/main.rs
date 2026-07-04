@@ -26,6 +26,7 @@ pub(crate) enum BroadcastMsg {
     TerminalOutput { id: String, data: String },
     TerminalResized { id: String, cols: u16, rows: u16 },
     ShowWindow,
+    TerminalsChanged,
 }
 
 pub(crate) struct DaemonState {
@@ -251,6 +252,7 @@ async fn daemon_main(state: Arc<DaemonState>) {
             state_exit.buffer_manager.lock().unwrap().remove(&id);
             state_exit.screen_manager.lock().unwrap().remove(&id);
             state_exit.terminal_infos.lock().unwrap().retain(|t| t.id != id);
+            let _ = state_exit.broadcast_tx.send(BroadcastMsg::TerminalsChanged);
             state_exit.terminal_sizes.lock().unwrap().remove(&id);
             state_exit.remote_allowed.lock().unwrap().remove(&id);
             state_exit.activity.notify_one();
@@ -286,7 +288,9 @@ async fn daemon_main(state: Arc<DaemonState>) {
             command: t.command.clone(),
             title: String::new(),
             workspace: String::new(),
+            allow_remote: false,
         });
+        let _ = state.broadcast_tx.send(BroadcastMsg::TerminalsChanged);
         state.terminal_sizes.lock().unwrap().insert(t.id.clone(), (t.cols, t.rows));
         state.remote_allowed.lock().unwrap().insert(t.id.clone());
         state.buffer_manager.lock().unwrap().create(&t.id);
@@ -393,6 +397,9 @@ async fn handle_client(pipe: tokio::net::windows::named_pipe::NamedPipeServer, s
                         // mode) shrinks the shared PTY — renders clean-but-small vs garbled.
                         BroadcastMsg::TerminalResized { id, cols, rows } => DaemonResponse::TerminalResized { id, cols, rows },
                         BroadcastMsg::ShowWindow => DaemonResponse::ShowWindow,
+                        // Notify desktop that terminal list changed (spawn/kill from phone),
+                        // so it can refresh and show any new terminals.
+                        BroadcastMsg::TerminalsChanged => DaemonResponse::TerminalsChanged,
                     };
                     if send_response(&writer_push, &resp).await.is_err() {
                         break;
@@ -502,7 +509,9 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
                             command: cmd_str,
                             title: String::new(),
                             workspace: String::new(),
+                            allow_remote: false,
                         });
+                        let _ = state.broadcast_tx.send(BroadcastMsg::TerminalsChanged);
                         state.terminal_sizes.lock().unwrap().insert(id.clone(), (cols, rows));
                         state.buffer_manager.lock().unwrap().create(&id);
                         state.screen_manager.lock().unwrap().create(&id, rows, cols);

@@ -856,6 +856,7 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
     let mut broadcast_rx = state.broadcast_tx.subscribe();
     let ws_tx = Arc::new(tokio::sync::Mutex::new(ws_tx));
     let ws_tx2 = ws_tx.clone();
+    let state_for_fwd = state.clone();
 
     let fwd = tokio::spawn(async move {
         loop {
@@ -876,6 +877,19 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                 }
                 Ok(crate::BroadcastMsg::ShowWindow) => {
                     // Not relevant for WS clients
+                }
+                Ok(crate::BroadcastMsg::TerminalsChanged) => {
+                    let list_msg = {
+                        let infos = state_for_fwd.terminal_infos.lock().unwrap();
+                        let sizes = state_for_fwd.terminal_sizes.lock().unwrap();
+                        let allowed = state_for_fwd.remote_allowed.lock().unwrap();
+                        let simple: Vec<serde_json::Value> = infos.iter()
+                            .filter(|t| allowed.contains(&t.id))
+                            .map(|t| term_to_json(t, &sizes)).collect();
+                        serde_json::json!({"type":"terminals","data":simple}).to_string()
+                    };
+                    let mut tx = ws_tx2.lock().await;
+                    let _ = tx.send(warp::ws::Message::text(list_msg)).await;
                 }
                 Err(broadcast::error::RecvError::Lagged(_)) => continue,
                 Err(_) => break,
@@ -1113,8 +1127,10 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                                 command: command.clone().unwrap_or_default(),
                                 title: String::new(),
                                 workspace: String::new(),
+                                allow_remote: false,
                             });
                             state.remote_allowed.lock().unwrap().insert(id.clone());
+                            let _ = state.broadcast_tx.send(crate::BroadcastMsg::TerminalsChanged);
                             state.terminal_sizes.lock().unwrap().insert(id.clone(), (cols, rows));
                             // Assign to the requested workspace if one exists (clamp to 0);
                             // tolerate a daemon with no workspaces yet (assigned = None).
@@ -1183,6 +1199,7 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                             state.buffer_manager.lock().unwrap().remove(id);
                             state.screen_manager.lock().unwrap().remove(id);
                             state.terminal_infos.lock().unwrap().retain(|t| t.id != id);
+                            let _ = state.broadcast_tx.send(crate::BroadcastMsg::TerminalsChanged);
                             state.terminal_sizes.lock().unwrap().remove(id);
                             state.remote_allowed.lock().unwrap().remove(id);
                             for w in state.workspace_data.lock().unwrap().iter_mut() {

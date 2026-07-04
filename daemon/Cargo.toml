@@ -49,7 +49,7 @@ winapi = { version = "0.3", features = ["namedpipeapi", "winbase", "handleapi", 
 
 [profile.release]
 opt-level = 3
-lto = true
+lto = false
 strip = true
-codegen-units = 1
+codegen-units = 16
 panic = "abort"

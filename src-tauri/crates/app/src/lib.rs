@@ -649,6 +649,11 @@ pub fn run() {
                                 let _ = w.set_focus();
                             }
                         }
+                        DaemonResponse::TerminalsChanged => {
+                            // Terminal list changed (spawn/kill from phone).
+                            // Frontend can listen for this to refresh.
+                            let _ = handle.emit("terminals-changed", ());
+                        }
                         _ => {}
                     }
                 }

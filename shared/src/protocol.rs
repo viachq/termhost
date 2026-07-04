@@ -178,6 +178,9 @@ pub enum DaemonResponse {
     /// Control mode). Lets the desktop follow the size cleanly instead of garbling.
     TerminalResized { id: String, cols: u16, rows: u16 },
     TerminalExited { id: String, code: Option<i32> },
+    /// Sent when terminals are created or killed from another client (e.g. phone).
+    /// Desktop should refresh its terminal list.
+    TerminalsChanged,
     WsStatus { seq: u32, running: bool, ip: String, #[serde(default)] port: u16, #[serde(default)] ips: Vec<String>, #[serde(default)] token: String },
     // version defaults to 0 for daemons built before versioning existed
     Pong {

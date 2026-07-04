@@ -162,7 +162,7 @@ fn response_seq(resp: &DaemonResponse) -> Option<u32> {
         DaemonResponse::ListDevicesResult { seq, .. } => Some(*seq),
         DaemonResponse::AutoApproveStatus { seq, .. } => Some(*seq),
         DaemonResponse::SleepConfigStatus { seq, .. } => Some(*seq),
-        DaemonResponse::Output { .. } | DaemonResponse::TerminalExited { .. } | DaemonResponse::TerminalResized { .. } | DaemonResponse::ShowWindow => None,
+        DaemonResponse::Output { .. } | DaemonResponse::TerminalExited { .. } | DaemonResponse::TerminalResized { .. } | DaemonResponse::ShowWindow | DaemonResponse::TerminalsChanged => None,
     }
 }
 

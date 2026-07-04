@@ -8,6 +8,7 @@ import CloseDialog from "./components/titlebar/CloseDialog";
 import WorkspaceEditor from "./components/pages/WorkspaceEditor";
 import PairingPage from "./components/pages/PairingPage";
 import Dashboard from "./components/pages/Dashboard";
+import AllTerminals from "./components/pages/AllTerminals";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { usePinchZoom } from "./hooks/usePinchZoom";
 import { useSettingsStore } from "./store/settingsStore";
@@ -509,6 +510,9 @@ export default function App() {
             )}
             {activeView === "pairing" && (
               <PairingPage />
+            )}
+            {activeView === "all-terminals" && (
+              <AllTerminals />
             )}
             {searchVisible && <SearchBar onClose={toggleSearch} />}
           </div>

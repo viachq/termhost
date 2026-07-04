@@ -85,4 +85,4 @@ export interface FileEntry {
 
 export type CursorStyle = "block" | "bar" | "underline";
 export type UiTheme = "dark" | "light" | "daylight";
-export type ActiveView = "dashboard" | "terminals" | "workspace-editor" | "pairing";
+export type ActiveView = "dashboard" | "terminals" | "workspace-editor" | "pairing" | "all-terminals";
