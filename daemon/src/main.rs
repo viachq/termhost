@@ -19,7 +19,7 @@ use tokio::net::windows::named_pipe::{ServerOptions, PipeMode};
 use tokio::sync::{broadcast, Mutex as TokioMutex, Notify, OnceCell};
 
 const PIPE_NAME: &str = r"\\.\pipe\termhost-pty-v1";
-const IDLE_TIMEOUT_SECS: u64 = 300;
+const IDLE_TIMEOUT_SECS: u64 = 86400; // 24h — don't auto-shutdown, user connects from phone
 
 #[derive(Clone, Debug)]
 pub(crate) enum BroadcastMsg {
