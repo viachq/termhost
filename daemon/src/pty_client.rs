@@ -64,7 +64,7 @@ impl PtyHostClient {
                     }
                 }
             }
-            eprintln!("pty-host connection lost");
+            tracing::error!("pty-host connection lost");
         });
 
         Ok(Self { writer, pending, next_seq: AtomicU64::new(1) })
@@ -79,7 +79,7 @@ impl PtyHostClient {
                 Ok(client) => return Ok(client),
                 Err(e) if e.raw_os_error() == Some(2) /* ERROR_FILE_NOT_FOUND */ => {
                     if attempt == 0 {
-                        eprintln!("pty-host not running, starting it: {:?}", pty_host_exe);
+                        tracing::info!("pty-host not running, starting it: {:?}", pty_host_exe);
                         let _ = std::process::Command::new(pty_host_exe).spawn();
                     }
                     tokio::time::sleep(std::time::Duration::from_millis(200)).await;

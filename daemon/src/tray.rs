@@ -125,7 +125,7 @@ fn launch_app() {
                 .creation_flags(0x00000200)
                 .spawn();
         } else {
-            eprintln!("App exe not found at {:?} or {:?}", app_exe, dev_app);
+            tracing::error!("App exe not found at {:?} or {:?}", app_exe, dev_app);
         }
     }
 }

@@ -431,6 +431,14 @@ fn ensure_rootfs(rootfs_path: &std::path::Path, tarball: &std::path::Path, busyb
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::builder()
+                .with_default_directive(tracing::Level::INFO.into())
+                .from_env_lossy()
+        )
+        .init();
+
     let args: Vec<String> = std::env::args().collect();
     let mut port = DEFAULT_PORT;
     let mut busybox_path: Option<String> = None;

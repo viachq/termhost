@@ -166,6 +166,14 @@ fn load_or_create_token() -> String {
 }
 
 fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::builder()
+                .with_default_directive(tracing::Level::INFO.into())
+                .from_env_lossy()
+        )
+        .init();
+
     // Single-instance guard via Windows named mutex.
     // The mutex lives for the entire process lifetime.
     let _mutex_guard = unsafe {
@@ -179,7 +187,7 @@ fn main() {
             if !h.is_null() {
                 winapi::um::handleapi::CloseHandle(h);
             }
-            eprintln!("Daemon already running, exiting");
+            tracing::error!("Daemon already running, exiting");
             return;
         }
         h // kept alive until process exits
@@ -218,7 +226,7 @@ fn main() {
         remote_allowed: std::sync::Mutex::new(std::collections::HashSet::new()),
     });
 
-    eprintln!("termhostd started on {}", PIPE_NAME);
+    tracing::info!("termhostd started on {}", PIPE_NAME);
 
     // Start tokio runtime on a background thread
     let state_clone = state.clone();
@@ -264,14 +272,14 @@ async fn daemon_main(state: Arc<DaemonState>) {
             let _ = state.pty_client.set(client);
         }
         Err(e) => {
-            eprintln!("FATAL: could not connect to pty-host ({}): {e}", pty_host_exe.display());
+            tracing::error!("FATAL: could not connect to pty-host ({}): {e}", pty_host_exe.display());
             std::process::exit(1);
         }
     }
 
     let existing = state.pty().list().await;
     if !existing.is_empty() {
-        eprintln!("Reattaching {} terminal(s) already running in pty-host", existing.len());
+        tracing::info!("Reattaching {} terminal(s) already running in pty-host", existing.len());
     }
     for t in existing {
         let label = if t.command.is_empty() {
@@ -319,7 +327,7 @@ async fn daemon_main(state: Arc<DaemonState>) {
             *state.ws_handle.lock().unwrap() = Some(h);
             *state.ws_port.lock().unwrap() = Some(port);
             sleep_blocker::prevent_system_sleep(true);
-            eprintln!("WS server auto-started on {}", addr);
+            tracing::info!("WS server auto-started on {}", addr);
         }
     }
 
@@ -331,7 +339,7 @@ async fn daemon_main(state: Arc<DaemonState>) {
         {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("Failed to create pipe: {}, retrying in 1s", e);
+                tracing::warn!("Failed to create pipe: {}, retrying in 1s", e);
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 continue;
             }
@@ -361,18 +369,18 @@ async fn idle_watcher(state: Arc<DaemonState>) {
         let has_terminals = !state.terminal_infos.lock().unwrap().is_empty();
 
         if clients == 0 && !has_terminals {
-            eprintln!("No clients and no terminals, starting idle countdown...");
+            tracing::info!("No clients and no terminals, starting idle countdown...");
             tokio::select! {
                 _ = tokio::time::sleep(std::time::Duration::from_secs(IDLE_TIMEOUT_SECS)) => {
                     let clients = state.client_count.load(std::sync::atomic::Ordering::Relaxed);
                     let has_terminals = !state.terminal_infos.lock().unwrap().is_empty();
                     if clients == 0 && !has_terminals {
-                        eprintln!("Idle timeout reached, shutting down");
+                        tracing::info!("Idle timeout reached, shutting down");
                         std::process::exit(0);
                     }
                 }
                 _ = state.activity.notified() => {
-                    eprintln!("Activity detected, cancelling idle shutdown");
+                    tracing::info!("Activity detected, cancelling idle shutdown");
                 }
             }
         }
@@ -421,7 +429,7 @@ async fn handle_client(pipe: tokio::net::windows::named_pipe::NamedPipeServer, s
         let request: DaemonRequest = match serde_json::from_slice(&frame) {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("Invalid request: {}", e);
+                tracing::warn!("Invalid request: {}", e);
                 continue;
             }
         };
@@ -472,7 +480,7 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
         DaemonRequest::Ping { seq } => Some(DaemonResponse::Pong { seq, version: PROTOCOL_VERSION }),
 
         DaemonRequest::Shutdown => {
-            eprintln!("Shutdown requested");
+            tracing::info!("Shutdown requested");
             tokio::spawn(async { tokio::time::sleep(std::time::Duration::from_millis(100)).await; std::process::exit(0); });
             Some(DaemonResponse::Ok { seq: 0 })
         }
