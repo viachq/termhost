@@ -2258,3 +2258,31 @@ html, body, #root {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* ── Quick Action Bar ── */
+.m-quick-actions {
+  display: flex;
+  gap: 6px;
+  padding: 4px 8px;
+  border-top: 1px solid var(--border, rgba(255,255,255,0.06));
+  background: var(--bg-panel, rgba(0,0,0,0.3));
+}
+.m-quick-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.7);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s;
+}
+.m-quick-btn:active {
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+}

@@ -1010,6 +1010,15 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                             tokio::task::spawn_blocking(move || crate::hid::send_key(&key));
                         }
                     }
+                    Some("inject_file") => {
+                        // Phone uploaded a file and wants its path written straight
+                        // into a specific terminal's stdin so the agent (Claude Code,
+                        // Codex, etc.) sees a usable file reference instead of relying
+                        // on the clipboard + manual paste.
+                        if let (Some(id), Some(path)) = (v["id"].as_str(), v["path"].as_str()) {
+                            state.pty().write(id, &format!("{}\n", path));
+                        }
+                    }
                     Some("list_workspaces") => {
                         let ws_msg = {
                             let ws_data = state.workspace_data.lock().unwrap();

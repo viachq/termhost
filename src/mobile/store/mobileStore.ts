@@ -114,7 +114,11 @@ export const useMobileStore = create<MobileState>((set) => ({
   fontSize: Number(localStorage.getItem("th-font-size")) || 13,
   pinnedIds: loadJson<string[]>("th-pinned-ids", []),
   termOrder: loadJson<string[]>("th-term-order", []),
-  snippets: loadJson<Snippet[]>("th-snippets", []),
+  snippets: loadJson<Snippet[]>('th-snippets', [
+    { id: 'builtin-restart-claude', label: '↺ Claude', text: '\x03clear && claude --dangerously-skip-permissions' },
+    { id: 'builtin-clear', label: 'Clear', text: '\x03clear' },
+    { id: 'builtin-ls', label: 'ls -la', text: 'ls -la' },
+  ]),
   savedHosts: loadJson<string[]>("th-saved-hosts", []),
   theme: (localStorage.getItem("th-theme") as ThemeMode) || "dark",
   accent: localStorage.getItem("th-accent") || "#e94560",
