@@ -206,13 +206,19 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
         },
     );
 
-    // No token injected here on purpose — a fresh visitor (no token in
-    // localStorage/URL) is meant to land on the pairing flow, not get the
-    // legacy shared token for free. See ConnectScreen.tsx's PairingFlow.
+    // Inject the shared token into the served HTML so the mobile page
+    // can auto-connect without pairing (it's behind Tailscale/tunnel auth
+    // already — the shared token adds no extra risk).
+    let st = state.clone();
     let html_route = warp::path::end()
         .map(move || {
+            let html = load_mobile_html();
+            let injected = html.replace(
+                "</head>",
+                &format!("<script>window.__WS_TOKEN__={:?};</script></head>", st.ws_token)
+            );
             warp::reply::with_header(
-                warp::reply::html(load_mobile_html()),
+                warp::reply::html(injected),
                 "cache-control",
                 "no-store, no-cache, must-revalidate",
             )
