@@ -206,6 +206,25 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
         },
     );
 
+    // Vite production assets: JS bundle + CSS. Served from dist-mobile/assets/.
+    let assets_route = warp::path("assets")
+        .and(warp::path::param())
+        .and(warp::path::end())
+        .and(warp::get())
+        .and_then(|name: String| async move {
+            let content_type = if name.ends_with(".js") {
+                "application/javascript"
+            } else if name.ends_with(".css") {
+                "text/css"
+            } else {
+                "application/octet-stream"
+            };
+            match load_dist_mobile_file(&format!("assets/{}", name)) {
+                Some(bytes) => Ok(warp::reply::with_header(bytes, "content-type", content_type)),
+                None => Err(warp::reject::not_found()),
+            }
+        });
+
     // Inject the shared token into the served HTML so the mobile page
     // can auto-connect without pairing (it's behind Tailscale/tunnel auth
     // already — the shared token adds no extra risk).
@@ -220,16 +239,12 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
                 "</head>",
                 &format!("<script>window.__WS_TOKEN__={:?};</script></head>", st.ws_token)
             );
-            // Inline module scripts must not contain literal </script> or the HTML
-            // parser treats it as the end of the script tag. Escaping the forward
-            // slash inside the token is invisible to JS (\\/ === /) but keeps the
-            // HTML parser from closing early.
+            // Inline <script type="module"> with </script> inside JS strings
+            // (e.g. marked) gets closed by the HTML parser early.  Vite's
+            // singlefile plugin already inlines everything, so we keep the
+            // module as a regular script and boot it via dynamic import.
             let escaped = injected
-                // Escape </script> inside inline JS so the HTML parser doesn't
-                // close the <script> tag prematurely on strings like marked's
-                // l.innerHTML="...".  JS's \/ === / so runtime value unchanged.
                 .replace("</script>", "<\\/script>")
-                // Restore actual closing </script> tags we just broke.
                 .replace("<\\/script>\n", "</script>\n")
                 .replace("<\\/script></head>", "</script></head>");
             warp::reply::with_header(
@@ -817,6 +832,7 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
         });
 
     let routes = html_route
+        .or(assets_route)
         .or(static_route)
         .or(ws_route)
         .or(api_dir)
