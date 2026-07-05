@@ -837,7 +837,7 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
         .and(warp::path::end())
         .and(warp::get())
         .and_then(|| async {
-            let pipeline = match crate::screen_capture::ScreenPipeline::start(
+            let mut pipeline = match crate::screen_capture::ScreenPipeline::start(
                 crate::screen_capture::StreamConfig {
                     width: 1280,
                     height: 720,
@@ -852,6 +852,10 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
                 Some(s) => tokio::process::ChildStdout::from_std(s).unwrap(),
                 None => return Err(warp::reject::not_found()),
             };
+            // Leak the pipeline so it lives as long as the HTTP connection.
+            // The destructor runs when termhostd exits (single-pipeline daemon).
+            Box::leak(Box::new(pipeline));
+
             let stream = tokio_util::io::ReaderStream::new(tokio::io::BufReader::new(stdout));
             Ok(warp::reply::with_header(
                 warp::reply::Response::new(hyper::Body::wrap_stream(stream)),

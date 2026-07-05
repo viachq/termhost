@@ -125,25 +125,36 @@ impl ScreenPipeline {
                 let t0 = std::time::Instant::now();
 
                 // Check stop signal
-                if !flag.load(Ordering::Relaxed) { break; }
+                if !flag.load(Ordering::Relaxed) {
+                    tracing::debug!("dxgi capture: stop flag set");
+                    break;
+                }
 
                 let img = match monitor.capture_image() {
                     Ok(i) => i,
-                    Err(_) => { thread::sleep(interval); continue; }
+                    Err(e) => { tracing::warn!("xcap capture failed: {e}"); thread::sleep(interval); continue; }
                 };
 
-                // XCap returns RgbaImage; raw bytes are BGRA (safe to write directly)
                 let raw = img.as_raw();
 
                 // Resize if needed
                 if img.width() != config.width || img.height() != config.height {
+                    tracing::debug!("resizing from {}x{} → {}x{}", img.width(), img.height(), config.width, config.height);
                     let resized = image::imageops::resize(
                         &img, config.width, config.height,
                         image::imageops::FilterType::CatmullRom,
                     );
-                    if ffmpeg_stdin.write_all(resized.as_raw()).is_err() { break; }
+                    tracing::debug!("resized done, raw len={}", resized.as_raw().len());
+                    if ffmpeg_stdin.write_all(resized.as_raw()).is_err() {
+                        tracing::warn!("ffmpeg stdin write failed after resize ({} bytes)", resized.as_raw().len());
+                        break;
+                    }
                 } else {
-                    if ffmpeg_stdin.write_all(raw).is_err() { break; }
+                    tracing::debug!("writing raw frame {}x{} ({} bytes)", img.width(), img.height(), raw.len());
+                    if ffmpeg_stdin.write_all(raw).is_err() {
+                        tracing::warn!("ffmpeg stdin write failed raw ({} bytes)", raw.len());
+                        break;
+                    }
                 }
 
                 let elapsed = t0.elapsed();
