@@ -836,26 +836,41 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
         .and(warp::path("live"))
         .and(warp::path::end())
         .and(warp::get())
+        .and_then(|| {
+            let st = state.clone();
+            async move {
+                // Check if someone else already streams
+                if !st.stream_lock.lock().unwrap() {
+                    return Err(warp::reject::not_found());
+                }
+                let mut ffmpeg = match crate::screen_capture::FfmpegStream::start(
+                    crate::screen_capture::StreamMode::H264Mf, 1280, 720, 20, "2M",
+                ) { Ok(f) => f, Err(_) => { *st.stream_lock.lock().unwrap() = true; return Err(warp::reject::not_found()) } };
+                let stdout = match ffmpeg.take_stdout() { Some(s) => tokio::process::ChildStdout::from_std(s).unwrap(), None => { *st.stream_lock.lock().unwrap() = true; return Err(warp::reject::not_found()) } };
+                Box::leak(Box::new(ffmpeg));
+                let stream = tokio_util::io::ReaderStream::new(tokio::io::BufReader::new(stdout));
+                Ok(warp::reply::with_header(warp::reply::Response::new(hyper::Body::wrap_stream(stream)), "content-type", "video/mp4"))
+            }
+        });
+
+    // ── Screen turbo stream: libx264 software encoding (max quality) ──
+    let screen_turbo = warp::path("screen")
+        .and(warp::path("turbo"))
+        .and(warp::path::end())
+        .and(warp::get())
         .and_then(|| async {
-            let mut ffmpeg = match crate::screen_capture::FfmpegStream::start(1280, 720, 20, "2M") {
-                Ok(f) => f,
-                Err(_) => return Err(warp::reject::not_found()),
-            };
-            let stdout = match ffmpeg.take_stdout() {
-                Some(s) => tokio::process::ChildStdout::from_std(s).unwrap(),
-                None => return Err(warp::reject::not_found()),
-            };
+            let mut ffmpeg = match crate::screen_capture::FfmpegStream::start(
+                crate::screen_capture::StreamMode::Libx264, 1280, 720, 30, "12M",
+            ) { Ok(f) => f, Err(_) => return Err(warp::reject::not_found()) };
+            let stdout = match ffmpeg.take_stdout() { Some(s) => tokio::process::ChildStdout::from_std(s).unwrap(), None => return Err(warp::reject::not_found()) };
             Box::leak(Box::new(ffmpeg));
             let stream = tokio_util::io::ReaderStream::new(tokio::io::BufReader::new(stdout));
-            Ok(warp::reply::with_header(
-                warp::reply::Response::new(hyper::Body::wrap_stream(stream)),
-                "content-type",
-                "video/mp4",
-            ))
+            Ok(warp::reply::with_header(warp::reply::Response::new(hyper::Body::wrap_stream(stream)), "content-type", "video/mp4"))
         });
 
     let routes = html_route
         .or(screen_live)
+        .or(screen_turbo)
         .or(assets_route)
         .or(static_route)
         .or(ws_route)
