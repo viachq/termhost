@@ -174,6 +174,8 @@ const [activeStates, setActiveStates] = useState<Record<string, boolean>>({});
   );
 
   const { connect, disconnect, send } = useSocket(handleMessage);
+  // Share WS send with ScreenView for MJPEG mode
+  useEffect(() => { (window as any).__screenSendRef = { current: send }; }, [send]);
 
   const handleConnect = useCallback((host: string) => connect(host), [connect]);
 

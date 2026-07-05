@@ -846,8 +846,24 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
             Ok(warp::reply::with_header(warp::reply::Response::new(hyper::Body::wrap_stream(stream)), "content-type", "video/mp4"))
         });
 
+    // ── Night HID compatible mode: gdigrab + libx264 + 12Mbps ──
+    let screen_nighthid = warp::path("screen")
+        .and(warp::path("nighthid"))
+        .and(warp::path::end())
+        .and(warp::get())
+        .and_then(|| async {
+            let mut ffmpeg = match crate::screen_capture::FfmpegStream::start(
+                crate::screen_capture::StreamMode::Libx264, 1920, 1080, 30, "12M",
+            ) { Ok(f) => f, Err(_) => return Err(warp::reject::not_found()) };
+            let stdout = match ffmpeg.take_stdout() { Some(s) => tokio::process::ChildStdout::from_std(s).unwrap(), None => return Err(warp::reject::not_found()) };
+            Box::leak(Box::new(ffmpeg));
+            let stream = tokio_util::io::ReaderStream::new(tokio::io::BufReader::new(stdout));
+            Ok(warp::reply::with_header(warp::reply::Response::new(hyper::Body::wrap_stream(stream)), "content-type", "video/mp4"))
+        });
+
     let routes = html_route
         .or(screen_live)
+        .or(screen_nighthid)
         .or(assets_route)
         .or(static_route)
         .or(ws_route)

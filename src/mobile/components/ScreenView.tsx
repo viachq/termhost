@@ -4,7 +4,7 @@ interface Props {
   active: boolean;
 }
 
-type StreamMode = "mjpeg" | "h264" | "turbo";
+type StreamMode = "mjpeg" | "h264" | "night-hid";
 
 /** Low-latency MJPEG over WebSocket renderer */
 function useMJPEG(active: boolean, wsSend: (msg: any) => void) {
@@ -49,16 +49,16 @@ function useMJPEG(active: boolean, wsSend: (msg: any) => void) {
 }
 
 /** H.264 via HTTP video element */
-function useH264(active: boolean) {
+function useH264(active: boolean, path: string) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!active) return;
     setError(null);
-  }, [active]);
+  }, [active, path]);
 
-  const url = active ? `${window.location.protocol}//${window.location.host}/screen/live` : "";
+  const url = active ? `${window.location.protocol}//${window.location.host}${path}` : "";
 
   return { videoRef, url, error, setError };
 }
@@ -69,7 +69,8 @@ export function ScreenView({ active }: Props) {
 
   const wsSend = (window as any).__screenSendRef?.current;
   const mjpeg = useMJPEG(active && streamMode === "mjpeg", wsSend);
-  const h264 = useH264(active && streamMode === "h264");
+  const h264 = useH264(active && streamMode === "h264", "/screen/live");
+  const nhid = useH264(active && streamMode === "night-hid", "/screen/nighthid");
 
   const handleModeChange = (mode: StreamMode) => {
     // Stop current stream
@@ -87,7 +88,7 @@ export function ScreenView({ active }: Props) {
     <div className="m-screen-view" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, background: "#000" }}>
       {/* Mode selector */}
       <div style={{ display: "flex", gap: 4, padding: "4px 8px", flexShrink: 0, background: "rgba(0,0,0,0.3)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-        {(["mjpeg", "h264", "turbo"] as const).map((mode) => (
+        {(["mjpeg", "h264", "night-hid"] as const).map((mode) => (
           <button
             key={mode}
             onClick={() => handleModeChange(mode)}
@@ -98,7 +99,7 @@ export function ScreenView({ active }: Props) {
               fontSize: 11, fontFamily: "inherit", cursor: "pointer",
             }}
           >
-            {mode === "mjpeg" ? "MJPEG 🚀" : mode === "h264" ? "H.264 🎯" : "Turbo 🔥"}
+            {mode === "mjpeg" ? "MJPEG 🚀" : mode === "h264" ? "H.264 🎯" : "NightHID 🔥"}
           </button>
         ))}
       </div>
@@ -164,11 +165,33 @@ export function ScreenView({ active }: Props) {
         </>
       )}
 
-      {/* Turbo mode placeholder */}
-      {streamMode === "turbo" && (
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#666", fontSize: 14 }}>
-          Turbo mode (DXGI + libx264) — coming soon
-        </div>
+      {/* Night HID mode: gdigrab + libx264 + 12Mbps FullHD */}
+      {streamMode === "night-hid" && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 8px", flexShrink: 0 }}>
+            <span style={{ color: "#888", fontSize: 11 }}>NightHID • 30fps • FullHD • ~3s delay</span>
+          </div>
+          <div style={{ flex: 1, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {nhid.error ? (
+              <div style={{ color: "#666", fontSize: 14, textAlign: "center" }}>
+                <p>{nhid.error}</p>
+                <button onClick={() => { setH264Key(k => k + 1); nhid.setError(null); }}
+                  style={{ marginTop: 8, padding: "8px 20px", background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 6, color: "#fff", cursor: "pointer" }}>
+                  Retry
+                </button>
+              </div>
+            ) : (
+              <video
+                key={h264Key}
+                ref={nhid.videoRef}
+                src={nhid.url}
+                autoPlay muted playsInline preload="auto"
+                onError={() => nhid.setError("Stream unavailable")}
+                style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+              />
+            )}
+          </div>
+        </>
       )}
     </div>
   );
