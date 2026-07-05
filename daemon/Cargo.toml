@@ -49,6 +49,7 @@ xcap = "0.9"
 arboard = "3"
 hyper = { version = "0.14", features = ["stream", "http1", "http2"] }
 tokio-util = { version = "0.7", features = ["io"] }
+# webrtc temporarily removed — API churn. Future use.
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["namedpipeapi", "winbase", "handleapi", "winuser", "synchapi", "errhandlingapi", "fileapi"] }
