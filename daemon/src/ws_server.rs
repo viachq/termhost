@@ -831,17 +831,24 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
             warp::reply::with_status(warp::reply::json(&serde_json::json!({"ok": true})), warp::http::StatusCode::OK)
         });
 
-    // ── Screen live stream via FFmpeg H.264 ──
+    // ── Screen live stream via DXGI + H.264 ──
     let screen_live = warp::path("screen")
         .and(warp::path("live"))
         .and(warp::path::end())
         .and(warp::get())
         .and_then(|| async {
-            let mut ffmpeg = match crate::screen_capture::FfmpegStream::start() {
-                Ok(f) => f,
-                Err(e) => return Err(warp::reject::not_found()),
+            let pipeline = match crate::screen_capture::ScreenPipeline::start(
+                crate::screen_capture::StreamConfig {
+                    width: 1280,
+                    height: 720,
+                    fps: 30,
+                    bitrate: "2M",
+                },
+            ) {
+                Ok(p) => p,
+                Err(_) => return Err(warp::reject::not_found()),
             };
-            let stdout = match ffmpeg.take_stdout() {
+            let stdout = match pipeline.take_stdout() {
                 Some(s) => tokio::process::ChildStdout::from_std(s).unwrap(),
                 None => return Err(warp::reject::not_found()),
             };
