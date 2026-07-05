@@ -831,31 +831,21 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
             warp::reply::with_status(warp::reply::json(&serde_json::json!({"ok": true})), warp::http::StatusCode::OK)
         });
 
-    // ── Screen live stream via DXGI + H.264 ──
+    // ── Screen live stream via FFmpeg H.264 ──
     let screen_live = warp::path("screen")
         .and(warp::path("live"))
         .and(warp::path::end())
         .and(warp::get())
         .and_then(|| async {
-            let mut pipeline = match crate::screen_capture::ScreenPipeline::start(
-                crate::screen_capture::StreamConfig {
-                    width: 1280,
-                    height: 720,
-                    fps: 30,
-                    bitrate: "2M",
-                },
-            ) {
-                Ok(p) => p,
+            let mut ffmpeg = match crate::screen_capture::FfmpegStream::start(1280, 720, 20, "2M") {
+                Ok(f) => f,
                 Err(_) => return Err(warp::reject::not_found()),
             };
-            let stdout = match pipeline.take_stdout() {
+            let stdout = match ffmpeg.take_stdout() {
                 Some(s) => tokio::process::ChildStdout::from_std(s).unwrap(),
                 None => return Err(warp::reject::not_found()),
             };
-            // Leak the pipeline so it lives as long as the HTTP connection.
-            // The destructor runs when termhostd exits (single-pipeline daemon).
-            Box::leak(Box::new(pipeline));
-
+            Box::leak(Box::new(ffmpeg));
             let stream = tokio_util::io::ReaderStream::new(tokio::io::BufReader::new(stdout));
             Ok(warp::reply::with_header(
                 warp::reply::Response::new(hyper::Body::wrap_stream(stream)),
