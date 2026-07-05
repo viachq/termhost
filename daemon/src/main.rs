@@ -5,6 +5,7 @@ mod hid;
 mod screen;
 mod screen_capture;
 mod sleep_blocker;
+mod webrtc_stream;
 mod ws_server;
 
 mod tray;

@@ -1147,6 +1147,26 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                             _ => {}
                         }
                     }
+                    Some("webrtc_offer") => {
+                        let sdp = v["sdp"].as_str().unwrap_or("");
+                        if !sdp.is_empty() {
+                            let sdp_owned = sdp.to_owned();
+                            let tx = ws_tx.clone();
+                            tokio::spawn(async move {
+                                let (frame_tx, frame_rx) = tokio::sync::mpsc::channel(4);
+                                match crate::webrtc_stream::start_webrtc_stream(&sdp_owned, frame_rx).await {
+                                    Ok(answer_sdp) => {
+                                        let msg = serde_json::json!({"type":"webrtc_answer","sdp":answer_sdp}).to_string();
+                                        let mut tx = tx.lock().await;
+                                        let _ = tx.send(warp::ws::Message::text(msg)).await;
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("webrtc: {e}");
+                                    }
+                                }
+                            });
+                        }
+                    }
                     Some("list_workspaces") => {
                         let ws_msg = {
                             let ws_data = state.workspace_data.lock().unwrap();

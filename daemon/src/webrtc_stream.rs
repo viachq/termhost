@@ -1,83 +1,130 @@
-//! WebRTC screen streaming.
-//! Uses webrtc-rs to create a PeerConnection with a H.264 video track.
-//! Signaling over existing WebSocket.
+//! WebRTC screen streaming for termhost.
+//! Daemon creates a PeerConnection that sends H.264 video.
+//! Phone creates offer with recvonly transceiver → daemon answers with video track.
 
 use std::sync::Arc;
-use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
-use webrtc::peer_connection::*;
-use webrtc::media_stream::{
-    track_local::static_sample::TrackLocalStaticSample,
-    MediaStreamTrack,
-};
+use rtc::media_stream::{MediaStreamTrack};
+use rtc::peer_connection::configuration::{RTCConfigurationBuilder, interceptor_registry::register_default_interceptors, media_engine::MediaEngine};
+use rtc::peer_connection::sdp::RTCSessionDescription;
+use rtc::peer_connection::transport::RTCIceServer;
+use rtc::rtp;
+use rtc::rtp_transceiver::rtp_sender::{RTCRtpCodec, RTCRtpCodingParameters, RTCRtpEncodingParameters, RtpCodecKind};
+use webrtc::media_stream::track_local::static_rtp::TrackLocalStaticRTP;
+use webrtc::media_stream::track_local::TrackLocal;
+use webrtc::peer_connection::{PeerConnection, PeerConnectionBuilder, PeerConnectionEventHandler, RTCIceGatheringState, RTCPeerConnectionState};
+use webrtc::runtime::{Runtime, default_runtime};
 
-/// Handle incoming SDP offer from phone, return answer SDP and a SampleWriter.
-pub async fn handle_offer(
-    offer_sdp: &str,
-) -> Result<(String, TrackWriter), Box<dyn std::error::Error>> {
-    #[derive(Clone)]
-    struct IceHandler;
-    #[async_trait::async_trait]
-    impl PeerConnectionEventHandler for IceHandler {
-        async fn on_ice_candidate(&self, _: RTCPeerConnectionIceEvent) {}
+#[derive(Clone)]
+struct DaemonHandler {
+    gather_complete_tx: std::sync::Arc<tokio::sync::Notify>,
+}
+
+#[async_trait::async_trait]
+impl PeerConnectionEventHandler for DaemonHandler {
+    async fn on_ice_gathering_state_change(&self, state: RTCIceGatheringState) {
+        if state == RTCIceGatheringState::Complete {
+            self.gather_complete_tx.notify_one();
+        }
     }
+    async fn on_connection_state_change(&self, state: RTCPeerConnectionState) {
+        tracing::info!("webrtc state: {state}");
+    }
+}
 
-    let config = RTCConfigurationBuilder::default()
-        .with_ice_servers(vec![RTCIceServer {
-            urls: vec!["stun:stun.l.google.com:19302".to_owned()],
+/// Start WebRTC: receive phone's offer SDP, return answer SDP,
+/// then transmit H.264 frames from frame_rx via RTP.
+pub async fn start_webrtc_stream(
+    offer_sdp: &str,
+    frame_rx: tokio::sync::mpsc::Receiver<Vec<u8>>,
+) -> std::result::Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let runtime = default_runtime().ok_or_else(|| {
+        rtc::shared::error::Error::Other("no async runtime".into())
+    })?;
+
+    let mut media_engine = MediaEngine::default();
+    media_engine.register_default_codecs()?;
+
+    let registry = register_default_interceptors(
+        rtc::interceptor::Registry::new(), &mut media_engine,
+    )?;
+
+    let notify = std::sync::Arc::new(tokio::sync::Notify::new());
+    let handler = Arc::new(DaemonHandler { gather_complete_tx: notify.clone() });
+
+    let pc: Arc<dyn PeerConnection> = Arc::new(
+        PeerConnectionBuilder::new()
+            .with_configuration(
+                RTCConfigurationBuilder::new()
+                    .with_ice_servers(vec![RTCIceServer {
+                        urls: vec!["stun:stun.l.google.com:19302".to_string()],
+                        ..Default::default()
+                    }])
+                    .build(),
+            )
+            .with_media_engine(media_engine)
+            .with_interceptor_registry(registry)
+            .with_handler(handler as Arc<dyn PeerConnectionEventHandler>)
+            .with_runtime(runtime.clone())
+            .with_udp_addrs(vec!["0.0.0.0:0".to_string()])
+            .build()
+            .await?,
+    );
+
+    let ssrc: u32 = rand::random();
+    let h264_codec = RTCRtpCodec {
+        mime_type: "video/H264".to_string(),
+        clock_rate: 90000,
+        channels: 0,
+        sdp_fmtp_line: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f".to_string(),
+        rtcp_feedback: vec![],
+    };
+
+    let track = Arc::new(TrackLocalStaticRTP::new(MediaStreamTrack::new(
+        "screen".to_string(),
+        "termhost".to_string(),
+        "termhost-screen".to_string(),
+        RtpCodecKind::Video,
+        vec![RTCRtpEncodingParameters {
+            rtp_coding_parameters: RTCRtpCodingParameters {
+                ssrc: Some(ssrc),
+                ..Default::default()
+            },
+            codec: h264_codec,
             ..Default::default()
-        }])
-        .build();
+        }],
+    )));
 
-    let pc = PeerConnectionBuilder::new()
-        .with_configuration(config)
-        .with_handler(Arc::new(IceHandler))
-        .with_udp_addrs(vec!["0.0.0.0:0".to_owned()])
-        .build()
-        .await?;
+    pc.add_track(track.clone() as Arc<dyn TrackLocal>).await?;
 
-    // Add a video transceiver (recvonly — phone receives)
-    let (_, h264_codec) = rtc::rtp_transceiver::rtp_sender::rtp_codec::new_h264_codec(
-        rtc::rtp_transceiver::RtpCodecKind::Video,
-    )?;
-    let track = MediaStreamTrack::new(
-        "screen".into(),
-        "termhost".into(),
-        Some(h264_codec),
-        None,
-        vec![],
-    )?;
-
-    let local = TrackLocalStaticSample::new(track)?;
-    let ssrc = local.ssrcs().first().copied().unwrap_or(1);
-    let writer = local.sample_writer(ssrc);
-
-    pc.add_track(local).await?;
-
-    // Set remote SDP (phone's offer)
-    let offer = RTCSessionDescription::offer(offer_sdp.to_owned());
+    let offer: RTCSessionDescription = serde_json::from_str(offer_sdp)?;
     pc.set_remote_description(offer).await?;
 
-    // Create answer
     let answer = pc.create_answer(None).await?;
     pc.set_local_description(answer.clone()).await?;
 
-    Ok((answer.sdp, TrackWriter { inner: writer }))
-}
+    notify.notified().await;
 
-/// Wraps SampleWriter for easier use.
-pub struct TrackWriter {
-    inner: rtc::media_stream::track_local::static_sample::SampleWriter<'static>,
-}
+    let json_answer = serde_json::to_string(
+        &pc.local_description().await.unwrap()
+    )?;
 
-impl TrackWriter {
-    pub async fn write(&self, data: bytes::Bytes, duration_ms: u64, is_key: bool) {
-        let sample = rtc::media::Sample {
-            data,
-            samples: 1,
-            duration: std::time::Duration::from_millis(duration_ms),
-            packetizer_flags: if is_key { rtc::media::sample::PacketizerFlag::KeySample } else { rtc::media::sample::PacketizerFlag::None },
-            prev_dropped_packets: 0,
-        };
-        let _ = self.inner.write(&sample, &[]).await;
-    }
+    runtime.spawn(Box::pin(async move {
+        let mut frame_rx = frame_rx;
+        let mut seq: u16 = 0;
+        while let Some(frame) = frame_rx.recv().await {
+            let packet = rtp::Packet {
+                header: rtp::Header {
+                    sequence_number: seq,
+                    timestamp: seq as u32 * 3000,
+                    ssrc,
+                    ..Default::default()
+                },
+                payload: bytes::Bytes::from(frame),
+            };
+            seq = seq.wrapping_add(1);
+            if track.write_rtp(packet).await.is_err() { break; }
+        }
+    }));
+
+    Ok(json_answer)
 }
