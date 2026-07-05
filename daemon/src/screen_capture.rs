@@ -45,6 +45,10 @@ pub fn start(tx: mpsc::UnboundedSender<Vec<u8>>) -> StreamHandle {
                 }
             };
 
+            // Convert RGBA → RGB (JPEG doesn't support alpha)
+            let rgb = image::DynamicImage::from(img).to_rgb8();
+            let (w, h) = rgb.dimensions();
+
             // Encode to JPEG
             let mut jpeg_buf = Vec::with_capacity(512 * 1024);
             {
@@ -53,10 +57,10 @@ pub fn start(tx: mpsc::UnboundedSender<Vec<u8>>) -> StreamHandle {
                     JPEG_QUALITY,
                 );
                 if let Err(e) = encoder.encode(
-                    img.as_raw(),
-                    img.width(),
-                    img.height(),
-                    image::ColorType::Rgba8.into(),
+                    &rgb,
+                    w,
+                    h,
+                    image::ColorType::Rgb8.into(),
                 ) {
                     tracing::error!("jpeg encode failed: {e}");
                     std::thread::sleep(interval);
