@@ -80,6 +80,10 @@ export function useSocket(onMessage: MessageHandler) {
           (window as any).__screenRender?.(e.data);
           return;
         }
+        // WebRTC answer — route to handler before main processing
+        if (typeof e.data === "string" && e.data.includes("webrtc_answer")) {
+          try { (window as any).__webrtcAnswerHandler?.(JSON.parse(e.data)); } catch {}
+        }
         try {
           const msg = JSON.parse(e.data) as ServerMessage;
           if (msg.type === "pong") {
