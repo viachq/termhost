@@ -1,20 +1,21 @@
-//! Screen capture and JPEG encoding for mobile screen view.
-//! Uses XCap (DXGI on Windows) for capture — same API as OBS/Discord.
-//! Frames are sent as binary WebSocket messages.
+//! Screen capture and streaming modules.
+//! - `start()` — old XCap + JPEG streaming (via WebSocket, kept for compatibility)
+//! - `FfmpegStream` — new FFmpeg H.264 hardware-encoded stream (via HTTP)
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::process::{Child, Command, Stdio};
+use std::sync::Mutex;
 use tokio::sync::mpsc;
 
-/// How many frames per second to capture.
+// ══════════════════════════════════════════════
+// XCap + JPEG streaming (legacy WS-based)
+// ══════════════════════════════════════════════
+
 const FPS: u64 = 10;
-/// JPEG quality (1–100). 85 is good for terminal text.
 const JPEG_QUALITY: u8 = 85;
-/// Max image width in pixels. Larger images are downscaled to save bandwidth.
 const MAX_WIDTH: u32 = 1280;
 
-/// Start capturing the primary monitor and sending JPEG frames into `tx`.
-/// Returns a handle; drop it or call `stop()` to end the stream.
 pub fn start(tx: mpsc::UnboundedSender<Vec<u8>>) -> StreamHandle {
     let running = Arc::new(AtomicBool::new(true));
     let flag = running.clone();
@@ -33,7 +34,6 @@ pub fn start(tx: mpsc::UnboundedSender<Vec<u8>>) -> StreamHandle {
         };
 
         let interval = std::time::Duration::from_millis(1000 / FPS);
-        tracing::info!("screen stream started on primary monitor");
 
         while flag.load(Ordering::Relaxed) {
             let t0 = std::time::Instant::now();
@@ -47,61 +47,87 @@ pub fn start(tx: mpsc::UnboundedSender<Vec<u8>>) -> StreamHandle {
                 }
             };
 
-            // Convert RGBA → RGB (JPEG doesn't support alpha), then downscale
             let mut rgb = image::DynamicImage::from(img).to_rgb8();
             let (w, h) = rgb.dimensions();
             if w > MAX_WIDTH {
                 let ratio = MAX_WIDTH as f64 / w as f64;
-                let new_w = MAX_WIDTH;
-                let new_h = (h as f64 * ratio) as u32;
-                rgb = image::imageops::resize(
-                    &rgb, new_w, new_h,
-                    image::imageops::FilterType::Lanczos3,
-                );
+                rgb = image::imageops::resize(&rgb, MAX_WIDTH, (h as f64 * ratio) as u32, image::imageops::FilterType::CatmullRom);
             }
             let (w, h) = rgb.dimensions();
 
-            // Encode to JPEG
             let mut jpeg_buf = Vec::with_capacity(512 * 1024);
             {
-                let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(
-                    &mut jpeg_buf,
-                    JPEG_QUALITY,
-                );
-                if let Err(e) = encoder.encode(
-                    &rgb,
-                    w,
-                    h,
-                    image::ColorType::Rgb8.into(),
-                ) {
+                let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_buf, JPEG_QUALITY);
+                if let Err(e) = encoder.encode(&rgb, w, h, image::ColorType::Rgb8.into()) {
                     tracing::error!("jpeg encode failed: {e}");
                     std::thread::sleep(interval);
                     continue;
                 }
             }
 
-            if tx.send(jpeg_buf).is_err() {
-                // Receiver dropped — client disconnected
-                break;
-            }
+            if tx.send(jpeg_buf).is_err() { break; }
 
             let elapsed = t0.elapsed();
-            if elapsed < interval {
-                std::thread::sleep(interval - elapsed);
-            }
+            if elapsed < interval { std::thread::sleep(interval - elapsed); }
         }
     });
 
     StreamHandle { running }
 }
 
-/// Drop this handle or call `stop()` to stop the stream.
 pub struct StreamHandle {
     running: Arc<AtomicBool>,
 }
 
 impl StreamHandle {
-    pub fn stop(&self) {
-        self.running.store(false, Ordering::Relaxed);
+    pub fn stop(&self) { self.running.store(false, Ordering::Relaxed); }
+}
+
+// ══════════════════════════════════════════════
+// FFmpeg H.264 hardware stream (HTTP-based)
+// ══════════════════════════════════════════════
+
+pub struct FfmpegStream {
+    child: Mutex<Option<Child>>,
+}
+
+impl FfmpegStream {
+    pub fn start() -> std::io::Result<Self> {
+        let child = Command::new("ffmpeg")
+            .args([
+                "-f", "gdigrab",
+                "-framerate", "15",
+                "-i", "desktop",
+                "-c:v", "h264_mf",
+                "-b:v", "1.5M",
+                "-vf", "scale=1280:720",
+                "-f", "mp4",
+                "-movflags", "frag_keyframe+empty_moov",
+                "-progress", "pipe:2",
+                "-loglevel", "warning",
+                "-",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+
+        tracing::info!("ffmpeg stream started (pid {})", child.id());
+        Ok(Self { child: Mutex::new(Some(child)) })
     }
+
+    pub fn take_stdout(&self) -> Option<std::process::ChildStdout> {
+        self.child.lock().unwrap().as_mut().and_then(|c| c.stdout.take())
+    }
+
+    pub fn stop(&self) {
+        if let Some(mut child) = self.child.lock().unwrap().take() {
+            let _ = child.kill();
+            let _ = child.wait();
+            tracing::info!("ffmpeg stream stopped");
+        }
+    }
+}
+
+impl Drop for FfmpegStream {
+    fn drop(&mut self) { self.stop(); }
 }

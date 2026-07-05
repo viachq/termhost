@@ -831,7 +831,30 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
             warp::reply::with_status(warp::reply::json(&serde_json::json!({"ok": true})), warp::http::StatusCode::OK)
         });
 
+    // ── Screen live stream via FFmpeg H.264 ──
+    let screen_live = warp::path("screen")
+        .and(warp::path("live"))
+        .and(warp::path::end())
+        .and(warp::get())
+        .and_then(|| async {
+            let mut ffmpeg = match crate::screen_capture::FfmpegStream::start() {
+                Ok(f) => f,
+                Err(e) => return Err(warp::reject::not_found()),
+            };
+            let stdout = match ffmpeg.take_stdout() {
+                Some(s) => tokio::process::ChildStdout::from_std(s).unwrap(),
+                None => return Err(warp::reject::not_found()),
+            };
+            let stream = tokio_util::io::ReaderStream::new(tokio::io::BufReader::new(stdout));
+            Ok(warp::reply::with_header(
+                warp::reply::Response::new(hyper::Body::wrap_stream(stream)),
+                "content-type",
+                "video/mp4",
+            ))
+        });
+
     let routes = html_route
+        .or(screen_live)
         .or(assets_route)
         .or(static_route)
         .or(ws_route)
