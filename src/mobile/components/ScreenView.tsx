@@ -95,15 +95,17 @@ function useWebRTC(active: boolean, wsSend: (msg: any) => void) {
   return status;
 }
 
-/** MJPEG over WS renderer */
+/** Low-latency MJPEG over WebSocket renderer */
 function useMJPEG(active: boolean, wsSend: (msg: any) => void) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [dim, setDim] = useState({ w: 0, h: 0 });
   const [mode, setMode] = useState<StreamMode>("mjpeg");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!active) return;
     (window as any).__screenRender = (blob: Blob) => {
+      setLoading(false);
       const canvas = canvasRef.current;
       if (!canvas) return;
       const url = URL.createObjectURL(blob);
@@ -129,11 +131,12 @@ function useMJPEG(active: boolean, wsSend: (msg: any) => void) {
       wsSend({ type: "screen_stream", action: "stop" });
     } else {
       (window as any).__mjpegActive = true;
+      setLoading(true);
       wsSend({ type: "screen_stream", action: "start", mode });
     }
   }, [wsSend, mode]);
 
-  return { canvasRef, dim, mode, setMode, toggleStream };
+  return { canvasRef, dim, mode, setMode, toggleStream, loading };
 }
 
 /** H.264 via HTTP video element */
