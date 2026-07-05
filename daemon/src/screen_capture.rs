@@ -37,6 +37,44 @@ pub fn start(tx: mpsc::UnboundedSender<Vec<u8>>) -> StreamHandle {
 pub struct StreamHandle { running: Arc<AtomicBool> }
 impl StreamHandle { pub fn stop(&self) { self.running.store(false, Ordering::Relaxed); } }
 
+/// Night HID mode: FFmpeg gdigrab + libx264 zerolatency + raw H.264 frames over WS
+pub fn start_nighthid(tx: mpsc::UnboundedSender<Vec<u8>>) -> StreamHandle {
+    let running = Arc::new(AtomicBool::new(true));
+    let flag = running.clone();
+
+    std::thread::spawn(move || {
+        let mut child = match Command::new("ffmpeg")
+            .args([
+                "-f", "gdigrab", "-framerate", "30", "-i", "desktop",
+                "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
+                "-b:v", "12M", "-f", "h264", "-loglevel", "warning", "-",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) => { tracing::error!("ffmpeg nighthid start failed: {e}"); return; }
+        };
+
+        let mut stdout = child.stdout.take().unwrap();
+        // Read raw H.264 NAL units and send as WS binary frames
+        let mut buf = vec![0u8; 512 * 1024];
+        while flag.load(Ordering::Relaxed) {
+            match std::io::Read::read(&mut stdout, &mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    if tx.send(buf[..n].to_vec()).is_err() { break; }
+                }
+            }
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+    });
+
+    StreamHandle { running }
+}
+
 // ══════════════════════════════════════════════
 // FFmpeg H.264 streaming modes
 // ══════════════════════════════════════════════

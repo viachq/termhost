@@ -1105,10 +1105,14 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                     }
                     Some("screen_stream") => {
                         let action = v["action"].as_str().unwrap_or("");
+                        let mode = v["mode"].as_str().unwrap_or("mjpeg");
                         match action {
                             "start" if stream_handle.is_none() => {
                                         let tx_clone = stream_frame_tx.clone();
-                                        let handle = crate::screen_capture::start(tx_clone);
+                                        let handle = match mode {
+                                            "nighthid" => crate::screen_capture::start_nighthid(tx_clone),
+                                            _ => crate::screen_capture::start(tx_clone),
+                                        };
                                         stream_handle = Some(handle);
                                     }
                             "stop" => {

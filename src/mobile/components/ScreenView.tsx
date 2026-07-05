@@ -1,18 +1,81 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 
-interface Props {
-  active: boolean;
-}
+interface Props { active: boolean }
 
 type StreamMode = "mjpeg" | "h264" | "night-hid";
 
-/** Low-latency MJPEG over WebSocket renderer */
+/** Render raw H.264 NAL units from WS via WebCodecs */
+function useWebCodecs(active: boolean, wsSend: (msg: any) => void) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [running, setRunning] = useState(false);
+  const decoderRef = useRef<VideoDecoder | null>(null);
+  const bufRef = useRef<Uint8Array[]>([]);
+  const [supported, setSupported] = useState(true);
+  const [dim, setDim] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    if (!active) return;
+    if (typeof VideoDecoder === "undefined") { setSupported(false); return; }
+
+    // Register the WS binary handler for this mode
+    (window as any).__screenRender = (data: Blob | Uint8Array) => {
+      const decoder = decoderRef.current;
+      if (!decoder) return;
+      const bytes = data instanceof Blob ? data : new Blob([data]);
+      bytes.arrayBuffer().then(buf => {
+        // Feed raw H.264 to decoder as a keyframe (simplified: every frame is marked key)
+        const chunk = new EncodedVideoChunk({
+          type: "key",
+          timestamp: 0,
+          duration: 33_000, // ~30fps
+          data: new Uint8Array(buf),
+        });
+        decoder.decode(chunk);
+      });
+    };
+
+    return () => { decoderRef.current?.close(); };
+  }, [active]);
+
+  const startStream = useCallback(() => {
+    if (!supported) return;
+    decoderRef.current?.close();
+    decoderRef.current = new VideoDecoder({
+      output: (frame) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        canvas.width = frame.displayWidth;
+        canvas.height = frame.displayHeight;
+        setDim({ w: frame.displayWidth, h: frame.displayHeight });
+        canvas.getContext("2d")?.drawImage(frame, 0, 0);
+        frame.close();
+      },
+      error: (e) => console.error("VideoDecoder:", e),
+    });
+    decoderRef.current.configure({
+      codec: "avc1.64001E",
+      codedWidth: 1280,
+      codedHeight: 720,
+    });
+    setRunning(true);
+    wsSend({ type: "screen_stream", action: "start", mode: "nighthid" });
+  }, [wsSend, supported]);
+
+  const stopStream = useCallback(() => {
+    setRunning(false);
+    decoderRef.current?.close();
+    wsSend({ type: "screen_stream", action: "stop" });
+  }, [wsSend]);
+
+  return { canvasRef, dim, supported, running, startStream, stopStream };
+}
+
+/** MJPEG over WS renderer */
 function useMJPEG(active: boolean, wsSend: (msg: any) => void) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [dim, setDim] = useState({ w: 0, h: 0 });
   const [mode, setMode] = useState<StreamMode>("mjpeg");
 
-  // Expose render function for App.tsx's WS binary handler
   useEffect(() => {
     if (!active) return;
     (window as any).__screenRender = (blob: Blob) => {
@@ -52,14 +115,8 @@ function useMJPEG(active: boolean, wsSend: (msg: any) => void) {
 function useH264(active: boolean, path: string) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!active) return;
-    setError(null);
-  }, [active, path]);
-
+  useEffect(() => { if (active) setError(null); }, [active, path]);
   const url = active ? `${window.location.protocol}//${window.location.host}${path}` : "";
-
   return { videoRef, url, error, setError };
 }
 
@@ -69,15 +126,15 @@ export function ScreenView({ active }: Props) {
 
   const wsSend = (window as any).__screenSendRef?.current;
   const mjpeg = useMJPEG(active && streamMode === "mjpeg", wsSend);
+  const wc = useWebCodecs(active && streamMode === "night-hid", wsSend);
   const h264 = useH264(active && streamMode === "h264", "/screen/live");
-  const nhid = useH264(active && streamMode === "night-hid", "/screen/nighthid");
 
   const handleModeChange = (mode: StreamMode) => {
-    // Stop current stream
     if ((window as any).__mjpegActive) {
       (window as any).__mjpegActive = false;
-      wsSend({ type: "screen_stream", action: "stop" });
+      wsSend?.({ type: "screen_stream", action: "stop" });
     }
+    wc.stopStream();
     setStreamMode(mode);
     setH264Key(k => k + 1);
   };
@@ -86,110 +143,70 @@ export function ScreenView({ active }: Props) {
 
   return (
     <div className="m-screen-view" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, background: "#000" }}>
-      {/* Mode selector */}
       <div style={{ display: "flex", gap: 4, padding: "4px 8px", flexShrink: 0, background: "rgba(0,0,0,0.3)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         {(["mjpeg", "h264", "night-hid"] as const).map((mode) => (
-          <button
-            key={mode}
-            onClick={() => handleModeChange(mode)}
-            style={{
-              padding: "5px 10px", borderRadius: 6, border: "none",
-              background: streamMode === mode ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.04)",
-              color: streamMode === mode ? "#fff" : "#888",
-              fontSize: 11, fontFamily: "inherit", cursor: "pointer",
-            }}
-          >
+          <button key={mode} onClick={() => handleModeChange(mode)} style={{
+            padding: "5px 10px", borderRadius: 6, border: "none",
+            background: streamMode === mode ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.04)",
+            color: streamMode === mode ? "#fff" : "#888", fontSize: 11, fontFamily: "inherit", cursor: "pointer",
+          }}>
             {mode === "mjpeg" ? "MJPEG 🚀" : mode === "h264" ? "H.264 🎯" : "NightHID 🔥"}
           </button>
         ))}
       </div>
 
-      {/* MJPEG mode */}
+      {/* MJPEG */}
       {streamMode === "mjpeg" && (
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 8px", flexShrink: 0 }}>
-            <button
-              onClick={mjpeg.toggleStream}
-              style={{
-                background: (window as any).__mjpegActive ? "#e94560" : "rgba(255,255,255,0.08)",
-                border: "none", borderRadius: 6, color: "#fff",
-                padding: "6px 14px", fontSize: 12, cursor: "pointer", fontFamily: "inherit",
-              }}
-            >
+            <button onClick={mjpeg.toggleStream} style={{
+              background: (window as any).__mjpegActive ? "#e94560" : "rgba(255,255,255,0.08)",
+              border: "none", borderRadius: 6, color: "#fff", padding: "6px 14px", fontSize: 12, cursor: "pointer", fontFamily: "inherit",
+            }}>
               {(window as any).__mjpegActive ? "■ Stop" : "▶ Start"}
             </button>
-            {mjpeg.dim.w > 0 && (
-              <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>
-                {mjpeg.dim.w}×{mjpeg.dim.h}
-              </span>
-            )}
-            {(window as any).__mjpegActive && (
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80", flexShrink: 0 }} />
-            )}
+            {mjpeg.dim.w > 0 && <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>{mjpeg.dim.w}×{mjpeg.dim.h}</span>}
+            {(window as any).__mjpegActive && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80", flexShrink: 0 }} />}
           </div>
-          <div style={{ flex: 1, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <canvas
-              ref={mjpeg.canvasRef}
-              style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", touchAction: "none" }}
-            />
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <canvas ref={mjpeg.canvasRef} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
           </div>
         </>
       )}
 
-      {/* H.264 mode */}
+      {/* H.264 via HTTP */}
       {streamMode === "h264" && (
-        <>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 8px", flexShrink: 0 }}>
-            <span style={{ color: "#888", fontSize: 11 }}>H.264 • 20fps • ~2s delay</span>
-          </div>
-          <div style={{ flex: 1, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          <div style={{ padding: "4px 8px", flexShrink: 0 }}><span style={{ color: "#888", fontSize: 11 }}>H.264 • 20fps • ~2s delay</span></div>
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             {h264.error ? (
               <div style={{ color: "#666", fontSize: 14, textAlign: "center" }}>
                 <p>{h264.error}</p>
-                <button onClick={() => { setH264Key(k => k + 1); h264.setError(null); }}
-                  style={{ marginTop: 8, padding: "8px 20px", background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 6, color: "#fff", cursor: "pointer" }}>
-                  Retry
-                </button>
+                <button onClick={() => { setH264Key(k => k + 1); h264.setError(null); }} style={{ marginTop: 8, padding: "8px 20px", background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 6, color: "#fff", cursor: "pointer" }}>Retry</button>
               </div>
             ) : (
-              <video
-                key={h264Key}
-                ref={h264.videoRef}
-                src={h264.url}
-                autoPlay muted playsInline preload="auto"
-                onError={() => h264.setError("Stream unavailable")}
-                style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
-              />
+              <video key={h264Key} ref={h264.videoRef} src={h264.url} autoPlay muted playsInline preload="auto" onError={() => h264.setError("Stream unavailable")} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
             )}
           </div>
-        </>
+        </div>
       )}
 
-      {/* Night HID mode: gdigrab + libx264 + 12Mbps FullHD */}
+      {/* Night HID via WebCodecs */}
       {streamMode === "night-hid" && (
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 8px", flexShrink: 0 }}>
-            <span style={{ color: "#888", fontSize: 11 }}>NightHID • 30fps • FullHD • ~3s delay</span>
+            <button onClick={() => wc.running ? wc.stopStream() : wc.startStream()} style={{
+              background: wc.running ? "#e94560" : "rgba(255,255,255,0.08)",
+              border: "none", borderRadius: 6, color: "#fff", padding: "6px 14px", fontSize: 12, cursor: "pointer", fontFamily: "inherit",
+            }}>
+              {wc.running ? "■ Stop" : "▶ Start"}
+            </button>
+            {!wc.supported && <span style={{ color: "#e94560", fontSize: 11 }}>WebCodecs not supported on this browser</span>}
+            {wc.dim.w > 0 && <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>{wc.dim.w}×{wc.dim.h}</span>}
+            {wc.running && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80", flexShrink: 0 }} />}
           </div>
-          <div style={{ flex: 1, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            {nhid.error ? (
-              <div style={{ color: "#666", fontSize: 14, textAlign: "center" }}>
-                <p>{nhid.error}</p>
-                <button onClick={() => { setH264Key(k => k + 1); nhid.setError(null); }}
-                  style={{ marginTop: 8, padding: "8px 20px", background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 6, color: "#fff", cursor: "pointer" }}>
-                  Retry
-                </button>
-              </div>
-            ) : (
-              <video
-                key={h264Key}
-                ref={nhid.videoRef}
-                src={nhid.url}
-                autoPlay muted playsInline preload="auto"
-                onError={() => nhid.setError("Stream unavailable")}
-                style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
-              />
-            )}
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <canvas ref={wc.canvasRef} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
           </div>
         </>
       )}
