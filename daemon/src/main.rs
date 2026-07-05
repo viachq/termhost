@@ -3,6 +3,7 @@
 mod buffer;
 mod hid;
 mod screen;
+mod screen_capture;
 mod sleep_blocker;
 mod ws_server;
 

@@ -75,6 +75,11 @@ export function useSocket(onMessage: MessageHandler) {
       };
 
       ws.onmessage = (e) => {
+        // Binary messages = JPEG screen frame
+        if (e.data instanceof Blob) {
+          (window as any).__screenRender?.(e.data);
+          return;
+        }
         try {
           const msg = JSON.parse(e.data) as ServerMessage;
           if (msg.type === "pong") {

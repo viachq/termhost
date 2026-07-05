@@ -185,6 +185,20 @@ impl PtyManager {
             if let Some(busybox) = bb {
                 break 'pick (busybox.to_string(), vec!["busybox".to_string(), "ash".to_string(), "-l".to_string()]);
             }
+            // Try app's own Termux prefix first (set via $PREFIX)
+            if let Ok(prefix) = std::env::var("PREFIX") {
+                let app_bash = std::path::Path::new(&prefix).join("bin/bash");
+                if app_bash.exists() {
+                    // Use --rcfile to load our profile (bash --login tries /data/data/com.termux/ which is hardcoded)
+                    let rcfile = std::path::Path::new(&prefix).join("etc/bash.bashrc");
+                    if rcfile.exists() {
+                        break 'pick (app_bash.to_string_lossy().to_string(), 
+                            vec!["bash".to_string(), "--rcfile".to_string(), rcfile.to_string_lossy().to_string()]);
+                    }
+                    break 'pick (app_bash.to_string_lossy().to_string(), vec!["bash".to_string()]);
+                }
+            }
+            // Fallback to official Termux
             if std::path::Path::new("/data/data/com.termux/files/usr/bin/bash").exists() {
                 break 'pick ("/data/data/com.termux/files/usr/bin/bash".to_string(), vec!["bash".to_string(), "--login".to_string()]);
             }

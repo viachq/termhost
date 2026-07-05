@@ -903,6 +903,21 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
         }
     });
 
+    // ── Screen stream state ──
+    let (stream_frame_tx, mut stream_frame_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
+    let mut stream_handle: Option<crate::screen_capture::StreamHandle> = None;
+
+    // Forward JPEG frames from the capture thread to the WebSocket
+    let ws_tx_for_stream = ws_tx.clone();
+    tokio::spawn(async move {
+        while let Some(jpeg) = stream_frame_rx.recv().await {
+            let mut tx = ws_tx_for_stream.lock().await;
+            if tx.send(warp::ws::Message::binary(jpeg)).await.is_err() {
+                break;
+            }
+        }
+    });
+
     while let Some(Ok(msg)) = ws_rx.next().await {
         if let Ok(text) = msg.to_str() {
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(text) {
@@ -1023,6 +1038,22 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                         // on the clipboard + manual paste.
                         if let (Some(id), Some(path)) = (v["id"].as_str(), v["path"].as_str()) {
                             state.pty().write(id, &format!("{}\n", path));
+                        }
+                    }
+                    Some("screen_stream") => {
+                        let action = v["action"].as_str().unwrap_or("");
+                        match action {
+                            "start" if stream_handle.is_none() => {
+                                        let tx_clone = stream_frame_tx.clone();
+                                        let handle = crate::screen_capture::start(tx_clone);
+                                        stream_handle = Some(handle);
+                                    }
+                            "stop" => {
+                                if let Some(h) = stream_handle.take() {
+                                    h.stop();
+                                }
+                            }
+                            _ => {}
                         }
                     }
                     Some("list_workspaces") => {

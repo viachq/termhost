@@ -45,6 +45,7 @@ thiserror = "2"
 portable-pty = "0.8"
 tray-icon = "0.19"
 image = { version = "0.25", default-features = false, features = ["ico", "png", "jpeg"] }
+xcap = "0.9"
 arboard = "3"
 
 [target.'cfg(windows)'.dependencies]

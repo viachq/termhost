@@ -16,9 +16,10 @@
 16|import { Home } from "./components/Home";
 17|import { Settings } from "./components/Settings";
 18|import { FilesPage } from "./components/FilesPage";
-19|import { SearchBar } from "./components/SearchBar";
-20|import { SnippetBar } from "./components/SnippetBar";
-21|import { haptic } from "./haptics";
+import { SearchBar } from "./components/SearchBar";
+import { SnippetBar } from "./components/SnippetBar";
+import { ScreenView } from "./components/ScreenView";
+import { haptic } from "./haptics";
 22|
 23|type TermSize = { cols: number; rows: number };
 24|
@@ -66,11 +67,13 @@
 66|  // "terminal" = the focused fullscreen terminal + keybar + input dock.
 67|  const [view, setView] = useState<"home" | "terminal">("home");
 68|  const [showClipboard, setShowClipboard] = useState(false);
-69|  const [showFiles, setShowFiles] = useState(false);
-70|  const [showSettings, setShowSettings] = useState(false);
-71|  const [showCustomizeToolbar, setShowCustomizeToolbar] = useState(false);
-72|  const [keysOpen, setKeysOpen] = useState(() => localStorage.getItem("th-keys-open") !== "0");
-73|  const [activeStates, setActiveStates] = useState<Record<string, boolean>>({});
+const [showFiles, setShowFiles] = useState(false);
+const [showSettings, setShowSettings] = useState(false);
+const [showScreen, setShowScreen] = useState(false);
+const [showCustomizeToolbar, setShowCustomizeToolbar] = useState(false);
+const [keysOpen, setKeysOpen] = useState(() => localStorage.getItem("th-keys-open") !== "0");
+const [streamActive, setStreamActive] = useState(false);
+const [activeStates, setActiveStates] = useState<Record<string, boolean>>({});
 74|
 75|  // Last time each terminal produced output — drives the home screen's "recently
 76|  // active" dot so you can see which agent is doing something without opening it.
@@ -251,10 +254,20 @@
 251|    send({ type: "spawn", wsIdx: useMobileStore.getState().activeWorkspaceIdx, cwd });
 252|  }, [send]);
 253|
-254|  const handleOpenInTerminal = useCallback((cwd: string) => {
-255|    setShowFiles(false);
-256|    handleSpawn(cwd);
-257|  }, [handleSpawn]);
+const handleOpenInTerminal = useCallback((cwd: string) => {
+  setShowFiles(false);
+  handleSpawn(cwd);
+}, [handleSpawn]);
+
+const handleScreenStart = useCallback(() => {
+  send({ type: "screen_stream", action: "start" } as any);
+  setStreamActive(true);
+}, [send]);
+
+const handleScreenStop = useCallback(() => {
+  send({ type: "screen_stream", action: "stop" } as any);
+  setStreamActive(false);
+}, [send]);
 258|
 259|  const handleDeleteTerminal = useCallback(
 260|    (id: string) => send({ type: "kill", id }),
@@ -354,24 +367,35 @@
 354|
 355|  return (
 356|    <div className="m-app">
-357|      {view === "home" && (
-358|        <Home
-359|          terminals={terminals}
-360|          activeTerminalId={activeTerminalId}
-361|          workspaces={workspaces}
-362|          activeWorkspaceIdx={activeWorkspaceIdx}
-363|          connected={connection === "connected"}
-364|          lastOutputAt={lastOutputAt}
-365|          onSelectTerminal={handleSelectTerminal}
-366|          onNewTerminal={handleSpawn}
-367|          onSwitchWorkspace={handleSwitchWorkspace}
-368|          onManageWorkspaces={() => setShowWorkspacePicker(true)}
-369|          onOpenFiles={() => setShowFiles(true)}
-370|          onOpenClipboard={() => setShowClipboard(true)}
-371|          onOpenSettings={() => setShowSettings(true)}
-372|          onDeleteTerminal={handleDeleteTerminal}
-373|        />
-374|      )}
+{view === "home" && (
+  <Home
+    terminals={terminals}
+    activeTerminalId={activeTerminalId}
+    workspaces={workspaces}
+    activeWorkspaceIdx={activeWorkspaceIdx}
+    connected={connection === "connected"}
+    lastOutputAt={lastOutputAt}
+    onSelectTerminal={handleSelectTerminal}
+    onNewTerminal={handleSpawn}
+    onSwitchWorkspace={handleSwitchWorkspace}
+    onManageWorkspaces={() => setShowWorkspacePicker(true)}
+    onOpenFiles={() => setShowFiles(true)}
+    onOpenClipboard={() => setShowClipboard(true)}
+    onOpenSettings={() => setShowSettings(true)}
+    onOpenScreen={() => setShowScreen(true)}
+    onDeleteTerminal={handleDeleteTerminal}
+  />
+)}
+
+{/* Screen stream view */}
+{view === "terminal" && (
+  <ScreenView
+    active={view === "terminal"}
+    streamActive={streamActive}
+    onStartStream={handleScreenStart}
+    onStopStream={handleScreenStop}
+  />
+)}
 375|
 376|      <div className="m-terminal-shell" style={{ display: view === "terminal" ? "flex" : "none" }}>
 377|        <div className="m-terminal-area" onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd}>

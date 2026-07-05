@@ -27,6 +27,7 @@ export type ServerMessage =
   | { type: "output"; id: string; data: string }
   | { type: "buffer"; id: string; data: string }
   | { type: "screen"; id: string; data: string }
+  | { type: "screen_size"; width: number; height: number }
   | { type: "workspaces"; data: WorkspaceInfo[]; activeIdx: number }
   | { type: "resize"; id: string; cols: number; rows: number }
   | { type: "resize_rejected"; id: string }
@@ -51,7 +52,7 @@ export type ClientMessage =
   | { type: "key_global"; key: string }
   | { type: "kill"; id: string };
 
-export type MobileTab = "terminal" | "clipboard" | "files";
+export type MobileTab = "terminal" | "clipboard" | "files" | "screen";
 
 export interface ToolbarKey {
   id: string;
