@@ -38,6 +38,7 @@ export function Home({
   onOpenFiles,
   onOpenClipboard,
   onOpenSettings,
+  onOpenScreen,
   onDeleteTerminal,
 }: Props) {
   const { pinnedIds, togglePinned, termOrder, moveTerminal } = useMobileStore();
