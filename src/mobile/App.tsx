@@ -18,7 +18,7 @@ import { Settings } from "./components/Settings";
 import { FilesPage } from "./components/FilesPage";
 import { SearchBar } from "./components/SearchBar";
 import { SnippetBar } from "./components/SnippetBar";
-import { ScreenView } from "./components/ScreenView";
+import { ScreenView, setScreenSend } from "./components/ScreenView";
 import { haptic } from "./haptics";
 
 type TermSize = { cols: number; rows: number };
@@ -175,6 +175,8 @@ const [activeStates, setActiveStates] = useState<Record<string, boolean>>({});
   );
 
   const { connect, disconnect, send } = useSocket(handleMessage);
+  // Share the WS send function with ScreenView for mouse events
+  useEffect(() => { setScreenSend(send); }, [send]);
 
   const handleConnect = useCallback((host: string) => connect(host), [connect]);
 

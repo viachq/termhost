@@ -50,7 +50,12 @@ export type ClientMessage =
   | { type: "ping"; ts: number }
   | { type: "type_global"; text: string }
   | { type: "key_global"; key: string }
-  | { type: "kill"; id: string };
+  | { type: "kill"; id: string }
+  | { type: "inject_file"; id: string; path: string }
+  | { type: "screen_stream"; action: "start" | "stop" }
+  | { type: "mouse_move"; x: number; y: number }
+  | { type: "mouse_down"; button: "left" | "right" }
+  | { type: "mouse_up"; button: "left" | "right" };
 
 export type MobileTab = "terminal" | "clipboard" | "files" | "screen";
 

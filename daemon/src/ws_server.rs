@@ -1087,6 +1087,30 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                             _ => {}
                         }
                     }
+                    Some("mouse_move") => {
+                        if let (Some(x), Some(y)) = (v["x"].as_u64(), v["y"].as_u64()) {
+                            // Scale from 0..<phoneWidth> to 0..65535 (MOUSEEVENTF_ABSOLUTE)
+                            let sx = (x as u64).min(65535) as u32;
+                            let sy = (y as u64).min(65535) as u32;
+                            crate::hid::mouse_move(sx, sy);
+                        }
+                    }
+                    Some("mouse_down") => {
+                        let btn = v["button"].as_str().unwrap_or("left");
+                        match btn {
+                            "left" => crate::hid::mouse_left(true),
+                            "right" => crate::hid::mouse_right(true),
+                            _ => {}
+                        }
+                    }
+                    Some("mouse_up") => {
+                        let btn = v["button"].as_str().unwrap_or("left");
+                        match btn {
+                            "left" => crate::hid::mouse_left(false),
+                            "right" => crate::hid::mouse_right(false),
+                            _ => {}
+                        }
+                    }
                     Some("list_workspaces") => {
                         let ws_msg = {
                             let ws_data = state.workspace_data.lock().unwrap();

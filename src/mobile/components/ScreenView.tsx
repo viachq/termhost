@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState } from "react";
+import { useRef, useEffect, useState } from "react";
 
 interface Props {
   active: boolean;
@@ -7,13 +7,22 @@ interface Props {
   onStopStream: () => void;
 }
 
+/** Inject the `send` function needed by mouse events. Called from App.tsx. */
+export function setScreenSend(fn: (msg: any) => void) {
+  const ref = (window as any).__screenSendRef;
+  if (ref) ref.current = fn;
+}
+
 export function ScreenView({ active, streamActive, onStartStream, onStopStream }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [dim, setDim] = useState({ w: 0, h: 0 });
-  const frameRef = useRef<number>(0);
-
-  // Public method for App.tsx to push JPEG data
   const renderRef = useRef<((blob: Blob) => void) | null>(null);
+  const sendRef = useRef<((msg: any) => void) | null>(null);
+
+  useEffect(() => {
+    const send = (window as any).__screenSendRef?.current;
+    if (send) sendRef.current = send;
+  }, []);
 
   useEffect(() => {
     renderRef.current = (blob: Blob) => {
@@ -35,11 +44,40 @@ export function ScreenView({ active, streamActive, onStartStream, onStopStream }
     };
   }, []);
 
-  // Expose render function via window for App.tsx to call
   useEffect(() => {
     (window as any).__screenRender = renderRef.current;
     return () => { delete (window as any).__screenRender; };
   }, []);
+
+  const toAbs = (clientX: number, clientY: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const px = (clientX - rect.left) / rect.width;
+    const py = (clientY - rect.top) / rect.height;
+    return { x: Math.round(px * 65535), y: Math.round(py * 65535) };
+  };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    const abs = toAbs(e.clientX, e.clientY);
+    if (!abs) return;
+    sendRef.current?.({ type: "mouse_move", x: abs.x, y: abs.y });
+    sendRef.current?.({ type: "mouse_down", button: "left" });
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    const abs = toAbs(e.clientX, e.clientY);
+    if (!abs) return;
+    sendRef.current?.({ type: "mouse_move", x: abs.x, y: abs.y });
+    sendRef.current?.({ type: "mouse_up", button: "left" });
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!e.buttons) return;
+    const abs = toAbs(e.clientX, e.clientY);
+    if (!abs) return;
+    sendRef.current?.({ type: "mouse_move", x: abs.x, y: abs.y });
+  };
 
   const toggle = () => {
     if (streamActive) onStopStream();
@@ -71,15 +109,16 @@ export function ScreenView({ active, streamActive, onStartStream, onStopStream }
       <div style={{ flex: 1, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: "#000" }}>
         <canvas
           ref={canvasRef}
-          style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          onPointerMove={handlePointerMove}
+          style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", touchAction: "none" }}
         />
       </div>
     </div>
   );
 }
 
-/** Called from App.tsx when a binary WS frame arrives with JPEG data. */
 export function renderScreenFrame(blob: Blob) {
-  const fn = (window as any).__screenRender as ((blob: Blob) => void) | null;
-  fn?.(blob);
+  ((window as any).__screenRender as ((blob: Blob) => void) | null)?.(blob);
 }

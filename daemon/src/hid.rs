@@ -8,7 +8,9 @@
 mod imp {
     use std::mem::size_of;
     use winapi::um::winuser::{
-        SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE,
+        SendInput, INPUT, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE,
+        MOUSEINPUT, MOUSEEVENTF_MOVE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
+        MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP,
         VK_BACK, VK_CONTROL, VK_DOWN, VK_ESCAPE, VK_LEFT, VK_RETURN, VK_RIGHT, VK_TAB, VK_UP,
     };
 
@@ -104,12 +106,55 @@ mod imp {
         }
         send_inputs(&mut inputs);
     }
+
+    // ── Mouse ──
+
+    fn mouse_input(dwFlags: u32, dx: i32, dy: i32) -> INPUT {
+        let mi = MOUSEINPUT {
+            dx,
+            dy,
+            mouseData: 0,
+            dwFlags,
+            time: 0,
+            dwExtraInfo: 0,
+        };
+        let mut input: INPUT = unsafe { std::mem::zeroed() };
+        input.type_ = INPUT_MOUSE;
+        unsafe {
+            *input.u.mi_mut() = mi;
+        }
+        input
+    }
+
+    /// Move mouse to absolute screen coordinates (0–65535 range).
+    pub fn mouse_move(x: u32, y: u32) {
+        let mut mi = mouse_input(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE, x as i32, y as i32);
+        send_inputs(&mut [mi]);
+    }
+
+    /// Press or release the left mouse button at the current position.
+    pub fn mouse_left(down: bool) {
+        let mut mi = mouse_input(if down { MOUSEEVENTF_LEFTDOWN } else { MOUSEEVENTF_LEFTUP }, 0, 0);
+        send_inputs(&mut [mi]);
+    }
+
+    /// Press or release the right mouse button at the current position.
+    pub fn mouse_right(down: bool) {
+        let mut mi = mouse_input(if down { MOUSEEVENTF_RIGHTDOWN } else { MOUSEEVENTF_RIGHTUP }, 0, 0);
+        send_inputs(&mut [mi]);
+    }
 }
 
 #[cfg(target_os = "windows")]
-pub use imp::{send_key, type_text};
+pub use imp::{mouse_left, mouse_move, mouse_right, send_key, type_text};
 
 #[cfg(not(target_os = "windows"))]
 pub fn type_text(_text: &str) {}
 #[cfg(not(target_os = "windows"))]
 pub fn send_key(_spec: &str) {}
+#[cfg(not(target_os = "windows"))]
+pub fn mouse_move(_x: u32, _y: u32) {}
+#[cfg(not(target_os = "windows"))]
+pub fn mouse_left(_down: bool) {}
+#[cfg(not(target_os = "windows"))]
+pub fn mouse_right(_down: bool) {}

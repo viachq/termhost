@@ -8,8 +8,10 @@ use tokio::sync::mpsc;
 
 /// How many frames per second to capture.
 const FPS: u64 = 10;
-/// JPEG quality (1–100). 60 is fine for terminal text.
-const JPEG_QUALITY: u8 = 60;
+/// JPEG quality (1–100). 85 is good for terminal text.
+const JPEG_QUALITY: u8 = 85;
+/// Max image width in pixels. Larger images are downscaled to save bandwidth.
+const MAX_WIDTH: u32 = 1280;
 
 /// Start capturing the primary monitor and sending JPEG frames into `tx`.
 /// Returns a handle; drop it or call `stop()` to end the stream.
@@ -45,8 +47,18 @@ pub fn start(tx: mpsc::UnboundedSender<Vec<u8>>) -> StreamHandle {
                 }
             };
 
-            // Convert RGBA → RGB (JPEG doesn't support alpha)
-            let rgb = image::DynamicImage::from(img).to_rgb8();
+            // Convert RGBA → RGB (JPEG doesn't support alpha), then downscale
+            let mut rgb = image::DynamicImage::from(img).to_rgb8();
+            let (w, h) = rgb.dimensions();
+            if w > MAX_WIDTH {
+                let ratio = MAX_WIDTH as f64 / w as f64;
+                let new_w = MAX_WIDTH;
+                let new_h = (h as f64 * ratio) as u32;
+                rgb = image::imageops::resize(
+                    &rgb, new_w, new_h,
+                    image::imageops::FilterType::Lanczos3,
+                );
+            }
             let (w, h) = rgb.dimensions();
 
             // Encode to JPEG
