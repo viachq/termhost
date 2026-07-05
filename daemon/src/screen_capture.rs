@@ -37,6 +37,41 @@ pub fn start(tx: mpsc::UnboundedSender<Vec<u8>>) -> StreamHandle {
 pub struct StreamHandle { running: Arc<AtomicBool> }
 impl StreamHandle { pub fn stop(&self) { self.running.store(false, Ordering::Relaxed); } }
 
+// ══════════════════════════════════════════════
+// Always-on background capture (instant first frame)
+// ══════════════════════════════════════════════
+
+use std::sync::OnceLock;
+static LAST_JPEG: OnceLock<Mutex<Vec<u8>>> = OnceLock::new();
+
+/// Start background XCap capture. Runs forever, saves latest JPEG frame.
+/// Call once at daemon startup. First frame available in ~50-100ms.
+pub fn start_background_capture() {
+    std::thread::spawn(|| {
+        let monitors = match xcap::Monitor::all() { Ok(m) => m, Err(e) => { tracing::error!("xcap bg: {e}"); return } };
+        let Some(monitor) = monitors.into_iter().next() else { tracing::error!("xcap bg: no monitors"); return };
+        LAST_JPEG.get_or_init(|| Mutex::new(Vec::new()));
+        loop {
+            let t0 = std::time::Instant::now();
+            let img = match monitor.capture_image() { Ok(i) => i, Err(_) => { std::thread::sleep(std::time::Duration::from_millis(33)); continue } };
+            let mut rgb = image::DynamicImage::from(img).to_rgb8();
+            let (w, h) = rgb.dimensions();
+            if w > 1280 { let r = 1280.0 / w as f64; rgb = image::imageops::resize(&rgb, 1280, (h as f64 * r) as u32, image::imageops::FilterType::CatmullRom); }
+            let (w, h) = rgb.dimensions();
+            let mut jpeg = Vec::with_capacity(512 * 1024);
+            if image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 85).encode(&rgb, w, h, image::ColorType::Rgb8.into()).is_ok() {
+                if let Some(last) = LAST_JPEG.get() { *last.lock().unwrap() = jpeg; }
+            }
+            let e = t0.elapsed(); if e < std::time::Duration::from_millis(33) { std::thread::sleep(std::time::Duration::from_millis(33) - e); }
+        }
+    });
+}
+
+/// Get the latest background-captured JPEG frame. Empty if not ready yet.
+pub fn get_last_jpeg() -> Vec<u8> {
+    LAST_JPEG.get().map(|m| m.lock().unwrap().clone()).unwrap_or_default()
+}
+
 /// Night HID mode: FFmpeg gdigrab + libx264 zerolatency + raw H.264 frames over WS
 pub fn start_nighthid(tx: mpsc::UnboundedSender<Vec<u8>>) -> StreamHandle {
     let running = Arc::new(AtomicBool::new(true));

@@ -176,6 +176,9 @@ fn main() {
         )
         .init();
 
+    // Pre-start screen capture for instant first frame when user opens ScreenView
+    crate::screen_capture::start_background_capture();
+
     // Single-instance guard via Windows named mutex.
     // The mutex lives for the entire process lifetime.
     let _mutex_guard = unsafe {
