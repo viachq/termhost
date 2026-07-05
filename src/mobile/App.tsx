@@ -386,17 +386,6 @@ const handleScreenStop = useCallback(() => {
     onDeleteTerminal={handleDeleteTerminal}
   />
 )}
-
-{/* Screen stream view */}
-{view === "terminal" && (
-  <ScreenView
-    active={view === "terminal"}
-    streamActive={streamActive}
-    onStartStream={handleScreenStart}
-    onStopStream={handleScreenStop}
-  />
-)}
-
       <div className="m-terminal-shell" style={{ display: view === "terminal" ? "flex" : "none" }}>
         <div className="m-terminal-area" onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd}>
           {terminals.map((t) => (
@@ -512,6 +501,23 @@ const handleScreenStop = useCallback(() => {
             <span>Clipboard</span>
           </div>
           <ClipboardPage onClipboard={handleClipboard} onTerminal={handleSendToTerminal} onTypeGlobal={handleTypeGlobal} onKeyGlobal={handleKeyGlobal} />
+        </div>
+      )}
+
+      {showScreen && (
+        <div className="m-page-overlay">
+          <div className="m-page-head">
+            <button className="m-page-back" onClick={() => { setShowScreen(false); handleScreenStop(); }} aria-label="Back">
+              ‹
+            </button>
+            <span>Screen</span>
+          </div>
+          <ScreenView
+            active={showScreen}
+            streamActive={streamActive}
+            onStartStream={handleScreenStart}
+            onStopStream={handleScreenStop}
+          />
         </div>
       )}
 

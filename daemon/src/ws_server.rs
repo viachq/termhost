@@ -213,12 +213,27 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
     let html_route = warp::path::end()
         .map(move || {
             let html = load_mobile_html();
+            // Strip crossorigin from inline module script (causes silent fail
+            // on some headless/browserstack setups for self-served pages).
+            let html = html.replace(r#"<script type="module" crossorigin>"#, r#"<script type="module">"#);
             let injected = html.replace(
                 "</head>",
                 &format!("<script>window.__WS_TOKEN__={:?};</script></head>", st.ws_token)
             );
+            // Inline module scripts must not contain literal </script> or the HTML
+            // parser treats it as the end of the script tag. Escaping the forward
+            // slash inside the token is invisible to JS (\\/ === /) but keeps the
+            // HTML parser from closing early.
+            let escaped = injected
+                // Escape </script> inside inline JS so the HTML parser doesn't
+                // close the <script> tag prematurely on strings like marked's
+                // l.innerHTML="...".  JS's \/ === / so runtime value unchanged.
+                .replace("</script>", "<\\/script>")
+                // Restore actual closing </script> tags we just broke.
+                .replace("<\\/script>\n", "</script>\n")
+                .replace("<\\/script></head>", "</script></head>");
             warp::reply::with_header(
-                warp::reply::html(injected),
+                warp::reply::html(escaped),
                 "cache-control",
                 "no-store, no-cache, must-revalidate",
             )
