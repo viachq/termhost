@@ -349,6 +349,20 @@ async fn daemon_main(state: Arc<DaemonState>) {
         state.remote_allowed.lock().unwrap().insert(t.id.clone());
         state.buffer_manager.lock().unwrap().create(&t.id);
         state.screen_manager.lock().unwrap().create(&t.id, t.rows, t.cols);
+        // Nudge a full redraw: this daemon restarted and has no byte history
+        // for this terminal — its screen lives only inside the PTY. A ±1-row
+        // resize round-trip forces the app to repaint, so the buffer and vt100
+        // parser fill with the real current screen. (PC display is irrelevant
+        // now — the phone is the only viewer.)
+        let nudge_state = state.clone();
+        let nudge_id = t.id.clone();
+        let (nudge_rows, nudge_cols) = (t.rows, t.cols);
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            let _ = nudge_state.pty().resize(&nudge_id, nudge_rows.saturating_add(1), nudge_cols).await;
+            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+            let _ = nudge_state.pty().resize(&nudge_id, nudge_rows, nudge_cols).await;
+        });
     }
 
     let state_idle = state.clone();

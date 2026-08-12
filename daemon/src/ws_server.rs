@@ -1146,18 +1146,21 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                         // Carries the snapshot's native cols/rows so the client paints
                         // it at the exact size — otherwise stale cells survive.
                         if let Some(id) = v["id"].as_str() {
-                            // The phone owns the size — rebuild the vt100 screen
-                            // from the raw output at the RECORDED size (replaying
-                            // the stream ends with the last frames drawn at that
-                            // size, so the result is the true clean screen).
-                            // All locks live inside this block; nothing crosses an await.
+                            // The phone owns the size. The parser is fed LIVE and is
+                            // the source of truth — rebuild from the raw buffer ONLY
+                            // when its size no longer matches the recorded (phone)
+                            // size (a resize collapsed or emptied it). Rebuilding on
+                            // every request replays historical frames of other widths
+                            // over the current screen (duplicated/ghost rows).
                             let snap = {
                                 let (cols, rows) = state.terminal_sizes.lock().unwrap()
                                     .get(id).copied().unwrap_or((80, 24));
-                                let raw = state.buffer_manager.lock().unwrap().get_bytes(id);
                                 let mut sm = state.screen_manager.lock().unwrap();
-                                if let Some(raw) = raw {
-                                    sm.rebuild(id, rows, cols, &raw);
+                                if sm.size_of(id) != Some((rows, cols)) {
+                                    let raw = state.buffer_manager.lock().unwrap().get_bytes(id);
+                                    if let Some(raw) = raw {
+                                        sm.rebuild(id, rows, cols, &raw);
+                                    }
                                 }
                                 sm.snapshot_with_size(id)
                             };

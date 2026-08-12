@@ -160,8 +160,15 @@ export function TerminalViewWrapper({
         const w = container.clientWidth || 320;
         // 0.6 ≈ average monospace char width in em; min 6px keeps it legible-ish
         const scaled = Math.min(12, Math.max(6, w / (cols * 0.6)));
-        term.options.fontSize = scaled;
-        term.resize(cols, rows);
+        if (term.cols !== cols || term.rows !== rows) {
+          // Size changed — drop cells from the previous size (they'd linger
+          // as ghosts) and rebuild the grid at the canonical size.
+          term.reset();
+          term.options.fontSize = scaled;
+          term.resize(cols, rows);
+        } else {
+          term.options.fontSize = scaled;
+        }
       }
     } else {
       term.options.fontSize = fontSize;
@@ -180,6 +187,9 @@ export function TerminalViewWrapper({
       // mid-load on the very first tap).
       if (term.cols >= 20 && term.rows >= 5) {
         onResize(id, term.cols, term.rows, true);
+        // Clear the old-size frame — the app in the PTY full-redraws on
+        // resize and the live stream paints the clean new frame.
+        term.clear();
       }
     }
     onActivate();

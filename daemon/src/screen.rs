@@ -8,18 +8,27 @@ use std::sync::{Arc, Mutex};
 /// attached mobile client cleanly.
 pub struct ScreenManager {
     parsers: HashMap<String, Arc<Mutex<vt100::Parser>>>,
+    /// The parser's current grid size per terminal (used to decide when a
+    /// rebuild is needed instead of a collapsing set_size).
+    sizes: HashMap<String, (u16, u16)>,
 }
 
 impl ScreenManager {
     pub fn new() -> Self {
-        Self { parsers: HashMap::new() }
+        Self { parsers: HashMap::new(), sizes: HashMap::new() }
     }
 
     pub fn create(&mut self, id: &str, rows: u16, cols: u16) -> Arc<Mutex<vt100::Parser>> {
         // 1000 lines of scrollback so history is retained alongside the live screen.
         let p = Arc::new(Mutex::new(vt100::Parser::new(rows, cols, 1000)));
         self.parsers.insert(id.to_string(), p.clone());
+        self.sizes.insert(id.to_string(), (rows, cols));
         p
+    }
+
+    /// Current parser size for `id`, if the parser exists.
+    pub fn size_of(&self, id: &str) -> Option<(u16, u16)> {
+        self.sizes.get(id).copied()
     }
 
     pub fn feed(parser: &Arc<Mutex<vt100::Parser>>, data: &[u8]) {
@@ -34,11 +43,12 @@ impl ScreenManager {
         }
     }
 
-    pub fn resize(&self, id: &str, rows: u16, cols: u16) {
+    pub fn resize(&mut self, id: &str, rows: u16, cols: u16) {
         if let Some(p) = self.parsers.get(id) {
             if let Ok(mut p) = p.lock() {
                 p.set_size(rows, cols);
             }
+            self.sizes.insert(id.to_string(), (rows, cols));
         }
     }
 
@@ -121,6 +131,12 @@ impl ScreenManager {
             p.process(raw);
         }
         self.parsers.insert(id.to_string(), p);
+        self.sizes.insert(id.to_string(), (rows, cols));
+    }
+
+    pub fn remove(&mut self, id: &str) {
+        self.parsers.remove(id);
+        self.sizes.remove(id);
     }
 
     /// Bytes that, written to a fresh terminal, reproduce the current screen.
@@ -130,10 +146,6 @@ impl ScreenManager {
                 String::from_utf8_lossy(&p.screen().contents_formatted()).into_owned()
             })
         })
-    }
-
-    pub fn remove(&mut self, id: &str) {
-        self.parsers.remove(id);
     }
 }
 
