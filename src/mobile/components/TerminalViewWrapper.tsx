@@ -178,7 +178,37 @@ export function TerminalViewWrapper({
 
   // Tap on a passive terminal = take control: fit to the phone, claim the PTY
   // (the daemon always accepts a claim), so the app redraws at phone width.
-  const claimControl = () => {
+  // A SWIPE (vertical drag) scrolls instead — never claims, never resizes.
+  const pointerRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    pointerRef.current = { x: e.clientX, y: e.clientY, moved: false };
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const p = pointerRef.current;
+    const term = termRef.current;
+    if (!p || !term) return;
+    const dy = e.clientY - p.y;
+    if (!p.moved) {
+      if (Math.abs(dy) < 8 && Math.abs(e.clientX - p.x) < 8) return;
+      p.moved = true; // a drag, not a tap — stop claiming
+    }
+    // Scroll the terminal buffer by the finger delta (line height ≈ fontSize * 1.2).
+    // scrollLines(+N) scrolls down (newer), negative scrolls up (older).
+    const lh = Math.max(10, (term.options.fontSize || 12) * 1.2);
+    const lines = Math.round(dy / lh);
+    if (lines !== 0) {
+      term.scrollLines(lines);
+      p.y = e.clientY; // incremental
+    }
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    const p = pointerRef.current;
+    pointerRef.current = null;
+    if (!p || p.moved) return; // was a scroll gesture
+    // genuine tap → claim
     const term = termRef.current;
     if (!term || !active) return;
     if (!isActive) {
@@ -207,13 +237,19 @@ export function TerminalViewWrapper({
   return (
     <div
       ref={containerRef}
-      onPointerDown={claimControl}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={() => { pointerRef.current = null; }}
+      onPointerLeave={() => { pointerRef.current = null; }}
       style={{
         display: active ? "flex" : "none",
         width: "100%",
         height: "100%",
         flex: 1,
         minHeight: 0,
+        // Let the finger drag reach us instead of the browser's page scroll.
+        touchAction: "none",
       }}
     />
   );
