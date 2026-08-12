@@ -1126,6 +1126,9 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                                 state.active_clients.lock().unwrap().insert(id.to_string(), "ws".to_string());
                                 state.terminal_sizes.lock().unwrap().insert(id.to_string(), (cols, rows));
                                 state.screen_manager.lock().unwrap().resize(id, rows, cols);
+                                // The phone owns the size from now on — pty-host
+                                // pins it and reverts any external re-assert.
+                                let _ = state.pty().lock_size(id, cols, rows).await;
                                 let _ = state.broadcast_tx.send(crate::BroadcastMsg::TerminalResized { id: id.to_string(), cols, rows });
                             }
                         }
@@ -1141,30 +1144,11 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                         }
                     }
                     Some("get_screen") => {
-                        // Clean current-screen snapshot (vt100), for painting a freshly
-                        // attached client without replaying scrolled-off history.
-                        // Carries the snapshot's native cols/rows so the client paints
-                        // it at the exact size — otherwise stale cells survive.
+                        // The screen lives in pty-host: it is fed from the live
+                        // stream and survives daemon restarts, so this is always
+                        // the true current screen at the PTY's actual size.
                         if let Some(id) = v["id"].as_str() {
-                            // The phone owns the size. The parser is fed LIVE and is
-                            // the source of truth — rebuild from the raw buffer ONLY
-                            // when its size no longer matches the recorded (phone)
-                            // size (a resize collapsed or emptied it). Rebuilding on
-                            // every request replays historical frames of other widths
-                            // over the current screen (duplicated/ghost rows).
-                            let snap = {
-                                let (cols, rows) = state.terminal_sizes.lock().unwrap()
-                                    .get(id).copied().unwrap_or((80, 24));
-                                let mut sm = state.screen_manager.lock().unwrap();
-                                if sm.size_of(id) != Some((rows, cols)) {
-                                    let raw = state.buffer_manager.lock().unwrap().get_bytes(id);
-                                    if let Some(raw) = raw {
-                                        sm.rebuild(id, rows, cols, &raw);
-                                    }
-                                }
-                                sm.snapshot_with_size(id)
-                            };
-                            if let Some((data, rows, cols)) = snap {
+                            if let Some((data, cols, rows)) = state.pty().screen(id).await {
                                 let msg = serde_json::json!({
                                     "type": "screen", "id": id, "data": data,
                                     "cols": cols, "rows": rows

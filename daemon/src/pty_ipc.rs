@@ -25,6 +25,15 @@ pub enum PtyHostRequest {
     Write { id: String, data: String },
     Resize { seq: u64, id: String, cols: u16, rows: u16 },
     Kill { seq: u64, id: String },
+    /// Ask pty-host for the terminal's current screen (vt100 snapshot at the
+    /// PTY's actual size). The screen lives in pty-host — it survives daemon
+    /// restarts and is fed from the live stream, so it is always the truth.
+    Screen { seq: u64, id: String },
+    /// Pin the PTY size to (cols, rows): pty-host reverts any external resize
+    /// (Windows Terminal tabs resize the conpty behind our back) as soon as
+    /// output wider than the lock shows up. Used when the phone claims a
+    /// terminal — the phone owns the size, nobody else.
+    LockSize { seq: u64, id: String, cols: u16, rows: u16 },
     List { seq: u64 },
 }
 
@@ -34,6 +43,7 @@ pub enum PtyHostEvent {
     Ok { seq: u64 },
     Error { seq: u64, message: String },
     ListResult { seq: u64, terminals: Vec<PtyHostTerminalInfo> },
+    ScreenResult { seq: u64, data: Option<String>, cols: u16, rows: u16 },
     /// Pushed, not a response to any request — id's PTY produced output.
     Output { id: String, data: String },
     /// Pushed — the process behind id's PTY has exited.

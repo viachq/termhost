@@ -55,7 +55,8 @@ impl PtyHostClient {
                             PtyHostEvent::SpawnResult { seq, .. }
                             | PtyHostEvent::Ok { seq }
                             | PtyHostEvent::Error { seq, .. }
-                            | PtyHostEvent::ListResult { seq, .. } => *seq,
+                            | PtyHostEvent::ListResult { seq, .. }
+                            | PtyHostEvent::ScreenResult { seq, .. } => *seq,
                             _ => continue,
                         };
                         if let Some(tx) = pending_task.lock().unwrap().remove(&seq) {
@@ -148,6 +149,24 @@ impl PtyHostClient {
             Ok(_) => Err("unexpected response".into()),
             Err(e) => Err(e.to_string()),
         }
+    }
+
+    /// Current screen snapshot from pty-host's vt100 parser: formatted
+    /// contents + the parser's grid size. `None` data = no screen for the id.
+    pub async fn screen(&self, id: &str) -> Option<(String, u16, u16)> {
+        let seq = self.seq();
+        let req = PtyHostRequest::Screen { seq, id: id.to_string() };
+        match self.request(seq, req).await {
+            Ok(PtyHostEvent::ScreenResult { data, cols, rows, .. }) => data.map(|d| (d, cols, rows)),
+            _ => None,
+        }
+    }
+
+    /// Pin the PTY to (cols, rows) — pty-host reverts any external resize.
+    pub async fn lock_size(&self, id: &str, cols: u16, rows: u16) -> bool {
+        let seq = self.seq();
+        let req = PtyHostRequest::LockSize { seq, id: id.to_string(), cols, rows };
+        matches!(self.request(seq, req).await, Ok(PtyHostEvent::Ok { .. }))
     }
 
     pub async fn list(&self) -> Vec<PtyHostTerminalInfo> {
