@@ -587,32 +587,19 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
         }
 
         DaemonRequest::Write { id, data } => {
-            let was_ws = state.active_clients.lock().unwrap().insert(id.clone(), "desktop".to_string()).as_deref() == Some("ws");
+            // PC is for running terminals, the phone is the only display/input
+            // client — typing on the desktop must NOT steal size ownership.
             state.pty().write(&id, &data);
-            if was_ws {
-                // Phone owned the terminal and the desktop just typed — kick the
-                // phone to passive so it stops rendering at phone width.
-                let _ = state.broadcast_tx.send(BroadcastMsg::TerminalControlLost { id });
-            }
             None
         }
 
-        DaemonRequest::Resize { seq, id, cols, rows } => {
-            let was_ws = state.active_clients.lock().unwrap().insert(id.clone(), "desktop".to_string()).as_deref() == Some("ws");
-            match state.pty().resize(&id, cols, rows).await {
-                Ok(()) => {
-                    state.terminal_sizes.lock().unwrap().insert(id.clone(), (cols, rows));
-                    state.screen_manager.lock().unwrap().resize(&id, rows, cols);
-                    // Tell WS (mobile) clients to follow the new canonical size.
-                    let _ = state.broadcast_tx.send(BroadcastMsg::TerminalResized { id: id.clone(), cols, rows });
-                    if was_ws {
-                        // Same ownership handover as Write: phone goes passive.
-                        let _ = state.broadcast_tx.send(BroadcastMsg::TerminalControlLost { id });
-                    }
-                    Some(DaemonResponse::Ok { seq })
-                }
-                Err(e) => Some(DaemonResponse::Error { seq, message: e }),
-            }
+        DaemonRequest::Resize { seq, id, .. } => {
+            // Sizes belong to the phone entirely. Desktop resize requests are
+            // ignored — the PTY only follows WS (phone) resizes. (The desktop
+            // app may still run for file/workspace features, but it never
+            // controls terminal size.)
+            let _ = id;
+            Some(DaemonResponse::Ok { seq })
         }
 
         DaemonRequest::Kill { seq, id } => {

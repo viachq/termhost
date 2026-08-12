@@ -1117,27 +1117,16 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                         }
                     }
                     Some("resize") => {
-                        // Size-gate ("whoever interacted last owns the size"):
-                        //  - `claim: true` (explicit phone tap) — always accept, phone owns.
-                        //  - plain resize — accept only while the phone already owns it.
-                        //  - desktop owns it → reject so the phone drops to passive scale.
+                        // Sizes belong to the phone — any WS resize is applied
+                        // and the phone keeps ownership. No desktop gating.
                         if let Some(id) = v["id"].as_str() {
                             let cols = v["cols"].as_u64().unwrap_or(80) as u16;
                             let rows = v["rows"].as_u64().unwrap_or(24) as u16;
-                            let claim = v["claim"].as_bool().unwrap_or(false);
-                            let phone_owns = state.active_clients.lock().unwrap()
-                                .get(id).map(|s| s == "ws").unwrap_or(false);
-                            if claim || phone_owns {
-                                if state.pty().resize(id, cols, rows).await.is_ok() {
-                                    state.active_clients.lock().unwrap().insert(id.to_string(), "ws".to_string());
-                                    state.terminal_sizes.lock().unwrap().insert(id.to_string(), (cols, rows));
-                                    state.screen_manager.lock().unwrap().resize(id, rows, cols);
-                                    let _ = state.broadcast_tx.send(crate::BroadcastMsg::TerminalResized { id: id.to_string(), cols, rows });
-                                }
-                            } else {
-                                let msg = serde_json::json!({"type":"resize_rejected","id":id}).to_string();
-                                let mut tx = ws_tx.lock().await;
-                                let _ = tx.send(warp::ws::Message::text(msg)).await;
+                            if state.pty().resize(id, cols, rows).await.is_ok() {
+                                state.active_clients.lock().unwrap().insert(id.to_string(), "ws".to_string());
+                                state.terminal_sizes.lock().unwrap().insert(id.to_string(), (cols, rows));
+                                state.screen_manager.lock().unwrap().resize(id, rows, cols);
+                                let _ = state.broadcast_tx.send(crate::BroadcastMsg::TerminalResized { id: id.to_string(), cols, rows });
                             }
                         }
                     }
