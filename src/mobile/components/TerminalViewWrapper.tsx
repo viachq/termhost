@@ -203,6 +203,36 @@ export function TerminalViewWrapper({
     }
   }, [isActive, cols, rows, active, fontSize, id, sizeTick]);
 
+  // Self-healing: a fit measured too early (layout still shifting after a
+  // claim tap, keyboard transition, pane resize) leaves the grid narrower
+  // than the container — empty space on the right. Every 1.5s, while the
+  // phone OWNS the terminal, re-fit whenever the grid width disagrees with
+  // the container by more than a couple of px.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    let raf = 0;
+    const check = () => {
+      const term = termRef.current;
+      if (!term || !activeRef.current || !isActiveRef.current) return;
+      const el = term.element;
+      if (!el) return;
+      const cw = container.clientWidth;
+      if (cw < 50) return; // hidden / zero-size
+      if (Math.abs(el.clientWidth - cw) > 4) {
+        try { fitRef.current?.fit(); } catch (_) { /* ignore */ }
+      }
+    };
+    const iv = window.setInterval(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(check);
+    }, 1500);
+    return () => {
+      clearInterval(iv);
+      cancelAnimationFrame(raf);
+    };
+  }, [id]);
+
   // Tap on a passive terminal = take control: fit to the phone, claim the PTY
   // (the daemon always accepts a claim), so the app redraws at phone width.
   // A SWIPE (vertical drag) scrolls instead — never claims, never resizes.

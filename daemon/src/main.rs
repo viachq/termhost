@@ -267,37 +267,11 @@ async fn daemon_main(state: Arc<DaemonState>) {
     match PtyHostClient::connect(
         &pty_host_exe,
         move |id, data| {
-            // Live size detection: if this chunk draws beyond the recorded
-            // grid (a WT tab or another owner resized the conpty behind our
-            // back), grow the vt100 screen BEFORE feeding so wide frames are
-            // captured instead of truncated, and tell every client the truth.
-            let hint = {
-                let (cur_cols, cur_rows) = state_out.terminal_sizes.lock().unwrap()
-                    .get(&id).copied().unwrap_or((80, 24));
-                let (max_row, max_col) = crate::screen::ScreenManager::scan_max_pos(data.as_bytes());
-                if max_col > cur_cols as usize || max_row > cur_rows as usize {
-                    Some((
-                        (max_col as u16).clamp(20, 600).max(cur_cols),
-                        (max_row as u16).clamp(10, 200).max(cur_rows),
-                    ))
-                } else {
-                    None
-                }
-            };
-            if let Some((cols, rows)) = hint {
-                state_out.screen_manager.lock().unwrap().resize(&id, rows, cols);
-                state_out.terminal_sizes.lock().unwrap().insert(id.clone(), (cols, rows));
-                let _ = state_out.broadcast_tx.send(BroadcastMsg::TerminalResized { id: id.clone(), cols, rows });
-                // The phone may have claimed this terminal, but wider frames
-                // than it set are arriving — an external owner (WT tab)
-                // re-asserted. Drop the phone to passive so it scales the
-                // whole screen instead of truncating at its claimed width.
-                let owned_by_ws = state_out.active_clients.lock().unwrap()
-                    .get(&id).map(|s| s == "ws").unwrap_or(false);
-                if owned_by_ws {
-                    let _ = state_out.broadcast_tx.send(BroadcastMsg::TerminalControlLost { id: id.clone() });
-                }
-            }
+            // Sizes are owned by the phone (pty-host locks them) — the live
+            // width-detection hack is gone: it grew terminal_sizes from
+            // whatever the frames happened to draw (garbage like 480x12),
+            // poisoning every client's scale. The recorded size is now
+            // whatever the phone claimed; pty-host enforces it.
             state_out.buffer_manager.lock().unwrap().append_by_id(&id, data.as_bytes());
             state_out.screen_manager.lock().unwrap().feed_by_id(&id, data.as_bytes());
             let _ = state_out.broadcast_tx.send(BroadcastMsg::TerminalOutput { id, data });
