@@ -110,29 +110,17 @@ impl ScreenManager {
         (max_row, max_col)
     }
 
-    /// Rebuild the vt100 screen for `id` from the terminal's RAW output bytes,
-    /// auto-detecting the true frame size. `set_size()` collapses content drawn
-    /// for a wider PTY into garbage (cells merge, lines truncate); replaying the
-    /// raw stream into a fresh parser sized by what the frames ACTUALLY drew
-    /// reproduces the true screen. External size owners (Windows Terminal tabs
-    /// via the bridge) can resize the conpty without pty-host noticing, so the
-    /// recorded size is not trustworthy — the output is.
-    /// Returns the detected (cols, rows).
-    pub fn rebuild_from_raw(&mut self, id: &str, fallback_rows: u16, fallback_cols: u16, raw: &[u8]) -> (u16, u16) {
-        // Detect size from the TAIL of the stream (the last ~8KB = the most
-        // recent frames) — the whole history may contain old wider frames
-        // (e.g. the shell's initial full-width clear) that no longer reflect
-        // the terminal's current size.
-        let scan_window = if raw.len() > 8192 { &raw[raw.len() - 8192..] } else { raw };
-        let (max_row, max_col) = Self::scan_max_pos(scan_window);
-        let rows = (max_row.clamp(10, 200) as u16).max(fallback_rows);
-        let cols = (max_col.clamp(20, 600) as u16).max(fallback_cols.min(40));
+    /// Rebuild the vt100 screen for `id` from the terminal's RAW output bytes
+    /// at the EXACT recorded size. set_size() collapses wider content into
+    /// garbage, so on any size-sensitive event the parser is rebuilt instead:
+    /// the raw stream replayed at the current size ends with the last frames
+    /// drawn at that size — the true current screen, clean.
+    pub fn rebuild(&mut self, id: &str, rows: u16, cols: u16, raw: &[u8]) {
         let p = Arc::new(Mutex::new(vt100::Parser::new(rows, cols, 1000)));
         if let Ok(mut p) = p.lock() {
             p.process(raw);
         }
         self.parsers.insert(id.to_string(), p);
-        (cols, rows)
     }
 
     /// Bytes that, written to a fresh terminal, reproduce the current screen.

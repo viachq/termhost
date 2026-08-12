@@ -1146,23 +1146,20 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                         // Carries the snapshot's native cols/rows so the client paints
                         // it at the exact size — otherwise stale cells survive.
                         if let Some(id) = v["id"].as_str() {
-                            // Rebuild the vt100 screen from the raw output: set_size()
-                            // collapses wider frames into garbage, and external size
-                            // owners (WT tabs) can resize the conpty behind our back —
-                            // the output stream is the only trustworthy size source.
+                            // The phone owns the size — rebuild the vt100 screen
+                            // from the raw output at the RECORDED size (replaying
+                            // the stream ends with the last frames drawn at that
+                            // size, so the result is the true clean screen).
                             // All locks live inside this block; nothing crosses an await.
                             let snap = {
-                                let (fcols, frows) = state.terminal_sizes.lock().unwrap()
+                                let (cols, rows) = state.terminal_sizes.lock().unwrap()
                                     .get(id).copied().unwrap_or((80, 24));
                                 let raw = state.buffer_manager.lock().unwrap().get_bytes(id);
                                 let mut sm = state.screen_manager.lock().unwrap();
-                                let (cols, rows) = match raw {
-                                    Some(raw) => sm.rebuild_from_raw(id, frows, fcols, &raw),
-                                    None => (fcols, frows),
-                                };
-                                drop(sm);
-                                state.terminal_sizes.lock().unwrap().insert(id.to_string(), (cols, rows));
-                                state.screen_manager.lock().unwrap().snapshot_with_size(id)
+                                if let Some(raw) = raw {
+                                    sm.rebuild(id, rows, cols, &raw);
+                                }
+                                sm.snapshot_with_size(id)
                             };
                             if let Some((data, rows, cols)) = snap {
                                 let msg = serde_json::json!({
