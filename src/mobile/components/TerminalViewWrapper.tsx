@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
@@ -38,6 +38,12 @@ export function TerminalViewWrapper({
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  // Bumped by the ResizeObserver whenever the container actually changes
+  // size — re-runs the mode effect (fit / re-scale) so the terminal always
+  // fills the space instead of staying at a stale grid (content cut off
+  // with empty room below).
+  const [sizeTick, setSizeTick] = useState(0);
+  const rafRef = useRef<number | null>(null);
   // Latest values for the mount-only effect closures (stale-closure guard).
   const activeRef = useRef(active);
   const isActiveRef = useRef(isActive);
@@ -131,6 +137,27 @@ export function TerminalViewWrapper({
     };
   }, [id]); // only on mount/unmount
 
+  // Watch the container for real size changes (keyboard open/close, toolbar
+  // rows wrapping, window resizes) and re-fit/re-scale. Without this the
+  // terminal keeps its stale grid and content gets cut off even though the
+  // viewport has room.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const ro = new ResizeObserver(() => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setSizeTick((t) => t + 1);
+      });
+    });
+    ro.observe(container);
+    return () => {
+      ro.disconnect();
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [id]);
+
   // Re-fit on active change (when this terminal becomes visible). Fonts are
   // loaded by then, so the measurement is trustworthy.
   useEffect(() => {
@@ -174,7 +201,7 @@ export function TerminalViewWrapper({
       term.options.fontSize = fontSize;
       try { fitRef.current?.fit(); } catch (_) { /* ignore */ }
     }
-  }, [isActive, cols, rows, active, fontSize, id]);
+  }, [isActive, cols, rows, active, fontSize, id, sizeTick]);
 
   // Tap on a passive terminal = take control: fit to the phone, claim the PTY
   // (the daemon always accepts a claim), so the app redraws at phone width.
