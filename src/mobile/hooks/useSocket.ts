@@ -1,7 +1,7 @@
 import { useRef, useCallback, useEffect } from "react";
 import { useMobileStore } from "../store/mobileStore";
 import type { ClientMessage, ServerMessage } from "../types";
-import { wsUrl } from "../api";
+import { wsUrl, clearTgSession } from "../api";
 
 type MessageHandler = (msg: ServerMessage) => void;
 
@@ -14,6 +14,10 @@ export function useSocket(onMessage: MessageHandler) {
   const pingTimer = useRef<number | null>(null);
   const hostRef = useRef<string | null>(null);
   const attemptRef = useRef(0);
+  // What auth the current socket URL carries — a Telegram session that the
+  // server keeps rejecting means the session is stale/revoked: stop retrying
+  // and drop back to the login gate instead of looping forever.
+  const authModeRef = useRef<"session" | "token" | "none">("none");
   // Buffers sends made while the socket is reconnecting so a mid-type network
   // blip doesn't silently eat keystrokes — flushed in order once back online.
   const queueRef = useRef<ClientMessage[]>([]);
@@ -54,7 +58,13 @@ export function useSocket(onMessage: MessageHandler) {
       }
       setConnection("connecting");
 
-      const ws = new WebSocket(wsUrl(host));
+      const url = wsUrl(host);
+      authModeRef.current = url.includes("session=")
+        ? "session"
+        : url.includes("token=")
+        ? "token"
+        : "none";
+      const ws = new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -99,6 +109,14 @@ export function useSocket(onMessage: MessageHandler) {
         clearPing();
         setConnection("disconnected");
         setPingMs(null);
+        // Stale/revoked Telegram session: the daemon 404s the WS handshake.
+        // After a couple of failed attempts give up retrying and clear the
+        // session so the connect screen shows the Telegram login gate again.
+        if (authModeRef.current === "session" && attemptRef.current >= 2) {
+          clearTgSession();
+          clearTimer();
+          return;
+        }
         // Exponential backoff (0.5s→5s cap): recover fast after a blip, but don't
         // hammer on a long outage. `online`/visibility events reset it to instant.
         const delay = Math.min(5000, 500 * 2 ** attemptRef.current);

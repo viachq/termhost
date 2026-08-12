@@ -181,7 +181,7 @@ pub enum DaemonResponse {
     /// Sent when terminals are created or killed from another client (e.g. phone).
     /// Desktop should refresh its terminal list.
     TerminalsChanged,
-    WsStatus { seq: u32, running: bool, ip: String, #[serde(default)] port: u16, #[serde(default)] ips: Vec<String>, #[serde(default)] token: String },
+    WsStatus { seq: u32, running: bool, ip: String, #[serde(default)] port: u16, #[serde(default)] ips: Vec<String>, #[serde(default)] token: String, #[serde(default)] cf_url: Option<String> },
     // version defaults to 0 for daemons built before versioning existed
     Pong {
         seq: u32,

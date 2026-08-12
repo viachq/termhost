@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMobileStore } from "../store/mobileStore";
-import { WS_TOKEN, apiOrigin, savePairedToken } from "../api";
+import { WS_TOKEN, apiOrigin, savePairedToken, readTgSession } from "../api";
+import { TgFlow } from "./TgFlow";
 import jsQR from "jsqr";
 
 interface Props {
@@ -177,7 +178,10 @@ export function ConnectScreen({ onConnect }: Props) {
 
   const [input, setInput] = useState(() => {
     const loc = window.location;
-    return isLocalhost(loc) ? loc.host : host;
+    // The page is served by the daemon itself (LAN, tunnel, or Mini App) —
+    // the current host is the right target, so prefill it instead of making
+    // the user retype it. A remembered host from a previous session wins.
+    return isLocalhost(loc) ? loc.host : host || loc.host;
   });
 
   const tried = useRef(false);
@@ -188,7 +192,7 @@ export function ConnectScreen({ onConnect }: Props) {
     if (isLocalhost(loc)) {
       setHost(loc.host);
       onConnect(loc.host);
-    } else if (WS_TOKEN) {
+    } else if (WS_TOKEN || readTgSession()) {
       setHost(loc.host);
       onConnect(loc.host);
     }
@@ -216,6 +220,18 @@ export function ConnectScreen({ onConnect }: Props) {
         <button className="m-connect-scan-cancel" onClick={() => setScanning(false)}>
           Cancel
         </button>
+      </div>
+    );
+  }
+
+  // Telegram auth: once a host is known, check whether the daemon requires a
+  // Telegram login. TgFlow handles it (Mini App auto-login / Login Widget);
+  // it renders nothing when auth is disabled — then pairing takes over.
+  if (!WS_TOKEN && !readTgSession() && input.trim() && !isLocalhost(window.location)) {
+    return (
+      <div className="m-connect">
+        <div className="m-connect-logo">termhost</div>
+        <TgFlow host={input.trim()} onAuthed={() => handleConnect()} />
       </div>
     );
   }

@@ -1,0 +1,210 @@
+import { useRef, useEffect } from "react";
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
+import "@xterm/xterm/css/xterm.css";
+
+interface Props {
+  id: string;
+  active: boolean;
+  isActive: boolean;
+  cols?: number;
+  rows?: number;
+  fontSize: number;
+  onData: (data: string) => void;
+  onResize: (id: string, cols: number, rows: number, claim?: boolean) => void;
+  onActivate: () => void;
+  onRegister: (id: string, term: Terminal) => void;
+  onUnregister: (id: string) => void;
+  onRegisterSearch: (id: string, addon: SearchAddon) => void;
+  onUnregisterSearch: (id: string) => void;
+}
+
+export function TerminalViewWrapper({
+  id,
+  active,
+  isActive,
+  cols,
+  rows,
+  fontSize,
+  onData,
+  onResize,
+  onActivate,
+  onRegister,
+  onUnregister,
+  onRegisterSearch,
+  onUnregisterSearch,
+}: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<Terminal | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
+  // Latest values for the mount-only effect closures (stale-closure guard).
+  const activeRef = useRef(active);
+  const isActiveRef = useRef(isActive);
+  activeRef.current = active;
+  isActiveRef.current = isActive;
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const fitAddon = new FitAddon();
+    const searchAddon = new SearchAddon();
+    const term = new Terminal({
+      cursorBlink: true,
+      cursorStyle: "block",
+      fontSize,
+      fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace",
+      allowTransparency: true,
+      theme: {
+        background: "rgba(0,0,0,0)",
+        foreground: "#e0e0e0",
+        cursor: "#e0e0e0",
+        selectionBackground: "#ffffff33",
+        black: "#1a1a2e",
+        red: "#e94560",
+        green: "#4ecca3",
+        yellow: "#f0c040",
+        blue: "#5b8def",
+        magenta: "#b388ff",
+        cyan: "#00bcd4",
+        white: "#e0e0e0",
+        brightBlack: "#2d2d44",
+        brightRed: "#ff6b6b",
+        brightGreen: "#7ed6a9",
+        brightYellow: "#ffd93d",
+        brightBlue: "#7ba7ff",
+        brightMagenta: "#cc99ff",
+        brightCyan: "#4dd0e1",
+        brightWhite: "#ffffff",
+      },
+    });
+
+    term.loadAddon(fitAddon);
+    term.loadAddon(searchAddon);
+
+    term.open(container);
+
+    // Set explicit size if provided (from daemon) — passive first paint,
+    // the daemon's canonical grid rendered whole (scaled by the mode effect).
+    if (cols && rows) {
+      term.resize(cols, rows);
+    }
+
+    // Fit only once the web fonts are actually loaded — a fit() before that
+    // measures a wrong char width and can shrink the PTY to a garbage size
+    // (e.g. 13 columns) which then poisons the shared terminal. And never
+    // fit on mount in a way that claims: the phone starts PASSIVE and takes
+    // control only on an explicit tap.
+    const fontsReady = (document as any).fonts?.ready
+      ? (document as any).fonts.ready.then(() => {
+          if (activeRef.current && isActiveRef.current) {
+            try { fitRef.current?.fit(); } catch (_) { /* ignore */ }
+          }
+        })
+      : Promise.resolve();
+    fontsReady.catch(() => {});
+
+    term.onData((data) => {
+      onData(data);
+      onActivate();
+    });
+
+    term.onResize(({ cols: c, rows: r }) => {
+      // Only forward size changes while the phone OWNS the terminal (active).
+      // Passive renders the canonical grid locally; forwarding its resize
+      // would fight the desktop for the shared PTY.
+      if (isActiveRef.current) onResize(id, c, r);
+    });
+
+    termRef.current = term;
+    fitRef.current = fitAddon;
+    onRegister(id, term);
+    onRegisterSearch(id, searchAddon);
+
+    return () => {
+      onUnregister(id);
+      onUnregisterSearch(id);
+      term.dispose();
+      termRef.current = null;
+      fitRef.current = null;
+    };
+  }, [id]); // only on mount/unmount
+
+  // Re-fit on active change (when this terminal becomes visible). Fonts are
+  // loaded by then, so the measurement is trustworthy.
+  useEffect(() => {
+    if (active && isActive && fitRef.current) {
+      const t = setTimeout(() => {
+        try { fitRef.current?.fit(); } catch (_) { /* ignore */ }
+      }, 100);
+      return () => clearTimeout(t);
+    }
+  }, [active, isActive]);
+
+  // Mode-aware sizing:
+  //  - ACTIVE (phone owns the PTY): fit the viewport — the phone width IS the
+  //    PTY width, so output is drawn for exactly what we show.
+  //  - PASSIVE (desktop owns the PTY): the PTY stays at the desktop's canonical
+  //    grid; instead of truncating, CSS-scale the font so the FULL grid fits
+  //    the viewport (tiny but whole — TUI apps like Claude Code stay intact).
+  // `resize_rejected` from the daemon flips isActive → this effect re-runs.
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term || !active) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    if (!isActive) {
+      if (cols && rows) {
+        const w = container.clientWidth || 320;
+        // 0.6 ≈ average monospace char width in em; min 6px keeps it legible-ish
+        const scaled = Math.min(12, Math.max(6, w / (cols * 0.6)));
+        term.options.fontSize = scaled;
+        term.resize(cols, rows);
+      }
+    } else {
+      term.options.fontSize = fontSize;
+      try { fitRef.current?.fit(); } catch (_) { /* ignore */ }
+    }
+  }, [isActive, cols, rows, active, fontSize, id]);
+
+  // Tap on a passive terminal = take control: fit to the phone, claim the PTY
+  // (the daemon always accepts a claim), so the app redraws at phone width.
+  const claimControl = () => {
+    const term = termRef.current;
+    if (!term || !active) return;
+    if (!isActive) {
+      try { fitRef.current?.fit(); } catch (_) { /* ignore */ }
+      // Sanity guard: never claim with a garbage size (fonts can still be
+      // mid-load on the very first tap).
+      if (term.cols >= 20 && term.rows >= 5) {
+        onResize(id, term.cols, term.rows, true);
+      }
+    }
+    onActivate();
+  };
+
+  // Expose fit method so parent can trigger it (e.g. on orientation change)
+  useEffect(() => {
+    const key = `__fit_${id}`;
+    (window as any)[key] = () => {
+      try { fitRef.current?.fit(); } catch (_) { /* ignore */ }
+    };
+    return () => { delete (window as any)[key]; };
+  }, [id]);
+
+  return (
+    <div
+      ref={containerRef}
+      onPointerDown={claimControl}
+      style={{
+        display: active ? "flex" : "none",
+        width: "100%",
+        height: "100%",
+        flex: 1,
+        minHeight: 0,
+      }}
+    />
+  );
+}

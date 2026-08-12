@@ -1,10 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod cloudflare_tunnel;
+mod raw_pipe;
 mod buffer;
 mod hid;
 mod screen;
 mod screen_capture;
 mod sleep_blocker;
+mod tg_auth;
 mod webrtc_stream;
 mod ws_server;
 
@@ -27,6 +30,10 @@ const IDLE_TIMEOUT_SECS: u64 = 86400; // 24h — don't auto-shutdown, user conne
 pub(crate) enum BroadcastMsg {
     TerminalOutput { id: String, data: String },
     TerminalResized { id: String, cols: u16, rows: u16 },
+    /// Desktop (IPC) took control of a terminal away from a WS (phone) client —
+    /// WS clients must drop to passive mode or they keep rendering at phone
+    /// width while the PTY is desktop-width (truncated output, ghost cells).
+    TerminalControlLost { id: String },
     ShowWindow,
     TerminalsChanged,
 }
@@ -61,6 +68,8 @@ pub(crate) struct DaemonState {
     pub ws_port: std::sync::Mutex<Option<u16>>,
     /// Per-process random token; mobile clients must present it on /ws and /api/*.
     pub ws_token: String,
+    /// Telegram auth (Mini App / Login Widget). Enabled when bot_token is configured.
+    pub tg: crate::tg_auth::TgAuth,
     /// Per-terminal active client: "desktop" or "ws".
     /// Only the active client's resize is applied (size-gate).
     pub active_clients: std::sync::Mutex<std::collections::HashMap<String, String>>,
@@ -73,6 +82,8 @@ pub(crate) struct DaemonState {
     pub approved_devices: std::sync::Mutex<Vec<ApprovedDevice>>,
     /// Tokens that currently have an active WebSocket connection.
     pub connected_devices: std::sync::Mutex<std::collections::HashSet<String>>,
+    /// Cloudflare Tunnel manager (optional, started on demand).
+    pub cloudflare: crate::cloudflare_tunnel::CloudflareTunnelRef,
 }
 
 #[derive(Clone)]
@@ -218,10 +229,12 @@ fn main() {
         ws_handle: std::sync::Mutex::new(None),
         ws_port: std::sync::Mutex::new(None),
         ws_token: load_or_create_token(),
+        tg: crate::tg_auth::TgAuth::load(),
         active_clients: std::sync::Mutex::new(std::collections::HashMap::new()),
         pending_pairs: std::sync::Mutex::new(std::collections::HashMap::new()),
         approved_devices: std::sync::Mutex::new(load_approved_devices()),
         connected_devices: std::sync::Mutex::new(std::collections::HashSet::new()),
+        cloudflare: cloudflare_tunnel::CloudflareTunnel::new(),
         auto_approve: std::sync::Mutex::new(false),
         sleep_never: std::sync::Mutex::new(true),
         sleep_timeout: std::sync::Mutex::new(0),
@@ -254,6 +267,37 @@ async fn daemon_main(state: Arc<DaemonState>) {
     match PtyHostClient::connect(
         &pty_host_exe,
         move |id, data| {
+            // Live size detection: if this chunk draws beyond the recorded
+            // grid (a WT tab or another owner resized the conpty behind our
+            // back), grow the vt100 screen BEFORE feeding so wide frames are
+            // captured instead of truncated, and tell every client the truth.
+            let hint = {
+                let (cur_cols, cur_rows) = state_out.terminal_sizes.lock().unwrap()
+                    .get(&id).copied().unwrap_or((80, 24));
+                let (max_row, max_col) = crate::screen::ScreenManager::scan_max_pos(data.as_bytes());
+                if max_col > cur_cols as usize || max_row > cur_rows as usize {
+                    Some((
+                        (max_col as u16).clamp(20, 600).max(cur_cols),
+                        (max_row as u16).clamp(10, 200).max(cur_rows),
+                    ))
+                } else {
+                    None
+                }
+            };
+            if let Some((cols, rows)) = hint {
+                state_out.screen_manager.lock().unwrap().resize(&id, rows, cols);
+                state_out.terminal_sizes.lock().unwrap().insert(id.clone(), (cols, rows));
+                let _ = state_out.broadcast_tx.send(BroadcastMsg::TerminalResized { id: id.clone(), cols, rows });
+                // The phone may have claimed this terminal, but wider frames
+                // than it set are arriving — an external owner (WT tab)
+                // re-asserted. Drop the phone to passive so it scales the
+                // whole screen instead of truncating at its claimed width.
+                let owned_by_ws = state_out.active_clients.lock().unwrap()
+                    .get(&id).map(|s| s == "ws").unwrap_or(false);
+                if owned_by_ws {
+                    let _ = state_out.broadcast_tx.send(BroadcastMsg::TerminalControlLost { id: id.clone() });
+                }
+            }
             state_out.buffer_manager.lock().unwrap().append_by_id(&id, data.as_bytes());
             state_out.screen_manager.lock().unwrap().feed_by_id(&id, data.as_bytes());
             let _ = state_out.broadcast_tx.send(BroadcastMsg::TerminalOutput { id, data });
@@ -410,6 +454,9 @@ async fn handle_client(pipe: tokio::net::windows::named_pipe::NamedPipeServer, s
                         // Notify desktop that terminal list changed (spawn/kill from phone),
                         // so it can refresh and show any new terminals.
                         BroadcastMsg::TerminalsChanged => DaemonResponse::TerminalsChanged,
+                        // Desktop-originated ownership handover — the desktop is the one
+                        // taking control, nothing to tell itself.
+                        BroadcastMsg::TerminalControlLost { .. } => continue,
                     };
                     if send_response(&writer_push, &resp).await.is_err() {
                         break;
@@ -525,6 +572,12 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
                         state.terminal_sizes.lock().unwrap().insert(id.clone(), (cols, rows));
                         state.buffer_manager.lock().unwrap().create(&id);
                         state.screen_manager.lock().unwrap().create(&id, rows, cols);
+                        // Start raw pipe server for WT bridge
+                        let state_for_pipe = state.clone();
+                        let id_for_pipe = id.clone();
+                        tokio::spawn(async move {
+                            crate::raw_pipe::start_raw_pipe(state_for_pipe, id_for_pipe).await;
+                        });
                     }
                     state.activity.notify_one();
                     Some(DaemonResponse::SpawnResult { seq, id })
@@ -534,19 +587,28 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
         }
 
         DaemonRequest::Write { id, data } => {
-            state.active_clients.lock().unwrap().insert(id.clone(), "desktop".to_string());
+            let was_ws = state.active_clients.lock().unwrap().insert(id.clone(), "desktop".to_string()).as_deref() == Some("ws");
             state.pty().write(&id, &data);
+            if was_ws {
+                // Phone owned the terminal and the desktop just typed — kick the
+                // phone to passive so it stops rendering at phone width.
+                let _ = state.broadcast_tx.send(BroadcastMsg::TerminalControlLost { id });
+            }
             None
         }
 
         DaemonRequest::Resize { seq, id, cols, rows } => {
-            state.active_clients.lock().unwrap().insert(id.clone(), "desktop".to_string());
+            let was_ws = state.active_clients.lock().unwrap().insert(id.clone(), "desktop".to_string()).as_deref() == Some("ws");
             match state.pty().resize(&id, cols, rows).await {
                 Ok(()) => {
                     state.terminal_sizes.lock().unwrap().insert(id.clone(), (cols, rows));
                     state.screen_manager.lock().unwrap().resize(&id, rows, cols);
                     // Tell WS (mobile) clients to follow the new canonical size.
-                    let _ = state.broadcast_tx.send(BroadcastMsg::TerminalResized { id, cols, rows });
+                    let _ = state.broadcast_tx.send(BroadcastMsg::TerminalResized { id: id.clone(), cols, rows });
+                    if was_ws {
+                        // Same ownership handover as Write: phone goes passive.
+                        let _ = state.broadcast_tx.send(BroadcastMsg::TerminalControlLost { id });
+                    }
                     Some(DaemonResponse::Ok { seq })
                 }
                 Err(e) => Some(DaemonResponse::Error { seq, message: e }),
@@ -604,17 +666,30 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
         }
 
         DaemonRequest::StartWsServer { seq, port } => {
-            let mut handle = state.ws_handle.lock().unwrap();
-            if handle.is_some() {
-                let ip = ws_server::get_local_ip_pub();
-                *state.ws_port.lock().unwrap() = Some(port);
-                return Some(DaemonResponse::WsStatus { seq, running: true, ip: format!("{}:{}", ip, port), port, ips: ws_server::get_local_ips(), token: state.ws_token.clone() });
+            let cf_url = state.cloudflare.url().await;
+            let result = {
+                let mut handle = state.ws_handle.lock().unwrap();
+                if handle.is_some() {
+                    let ip = ws_server::get_local_ip_pub();
+                    *state.ws_port.lock().unwrap() = Some(port);
+                    let resp = DaemonResponse::WsStatus { seq, running: true, ip: format!("{}:{}", ip, port), port, ips: ws_server::get_local_ips(), token: state.ws_token.clone(), cf_url };
+                    (Some(resp), None)
+                } else {
+                    let (h, addr) = ws_server::start(port, state.clone());
+                    *handle = Some(h);
+                    *state.ws_port.lock().unwrap() = Some(port);
+                    sleep_blocker::prevent_system_sleep(true);
+                    (None, Some(addr))
+                }
+            };
+            if let (Some(resp), _) = result {
+                return Some(resp);
             }
-            let (h, addr) = ws_server::start(port, state.clone());
-            *handle = Some(h);
-            *state.ws_port.lock().unwrap() = Some(port);
-            sleep_blocker::prevent_system_sleep(true);
-            Some(DaemonResponse::WsStatus { seq, running: true, ip: addr, port, ips: ws_server::get_local_ips(), token: state.ws_token.clone() })
+            if let (_, Some(addr)) = &result {
+                let cf_url2 = state.cloudflare.url().await;
+                return Some(DaemonResponse::WsStatus { seq, running: true, ip: addr.clone(), port, ips: ws_server::get_local_ips(), token: state.ws_token.clone(), cf_url: cf_url2 });
+            }
+            unreachable!()
         }
         DaemonRequest::StopWsServer { seq } => {
             let mut handle = state.ws_handle.lock().unwrap();
@@ -626,11 +701,12 @@ async fn handle_request(state: &Arc<DaemonState>, req: DaemonRequest) -> Option<
             Some(DaemonResponse::Ok { seq })
         }
         DaemonRequest::WsServerStatus { seq } => {
+            let cf_url = state.cloudflare.url().await;
             let handle = state.ws_handle.lock().unwrap();
             let running = handle.is_some();
             let ip = ws_server::get_local_ip_pub();
             let port = state.ws_port.lock().unwrap().unwrap_or(0);
-            Some(DaemonResponse::WsStatus { seq, running, ip, port, ips: ws_server::get_local_ips(), token: state.ws_token.clone() })
+            Some(DaemonResponse::WsStatus { seq, running, ip, port, ips: ws_server::get_local_ips(), token: state.ws_token.clone(), cf_url })
         }
         DaemonRequest::SyncWorkspaces { seq, workspaces, .. } => {
             *state.workspace_data.lock().unwrap() = workspaces;

@@ -21,6 +21,9 @@ struct PathQuery {
 struct TokenQuery {
     #[serde(default)]
     token: Option<String>,
+    /// Telegram-auth session token (alternative to the shared token).
+    #[serde(default)]
+    session: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -228,6 +231,8 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
     // Inject the shared token into the served HTML so the mobile page
     // can auto-connect without pairing (it's behind Tailscale/tunnel auth
     // already — the shared token adds no extra risk).
+    // Once Telegram auth is configured (bot_token), the token is NOT
+    // injected — the page must log in via Telegram first.
     let st = state.clone();
     let html_route = warp::path::end()
         .map(move || {
@@ -235,10 +240,14 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
             // Strip crossorigin from inline module script (causes silent fail
             // on some headless/browserstack setups for self-served pages).
             let html = html.replace(r#"<script type="module" crossorigin>"#, r#"<script type="module">"#);
-            let injected = html.replace(
-                "</head>",
-                &format!("<script>window.__WS_TOKEN__={:?};</script></head>", st.ws_token)
-            );
+            let injected = if st.tg.enabled() {
+                html
+            } else {
+                html.replace(
+                    "</head>",
+                    &format!("<script>window.__WS_TOKEN__={:?};</script></head>", st.ws_token)
+                )
+            };
             // Inline <script type="module"> with </script> inside JS strings
             // (e.g. marked) gets closed by the HTML parser early.  Vite's
             // singlefile plugin already inlines everything, so we keep the
@@ -261,8 +270,9 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
         .and_then(move |q: TokenQuery, ws: warp::ws::Ws| {
             let s = st.clone();
             let token = q.token.clone();
+            let session = q.session.clone();
             async move {
-                if s.is_valid_token(token.as_deref()) {
+                if s.is_valid_token(token.as_deref()) || s.tg.check_session(session.as_deref().unwrap_or("")) {
                     Ok::<_, warp::Rejection>(ws.on_upgrade(move |socket| handle_ws(socket, s, token)))
                 } else {
                     Err(warp::reject::not_found())
@@ -861,6 +871,70 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
             Ok(warp::reply::with_header(warp::reply::Response::new(hyper::Body::wrap_stream(stream)), "content-type", "video/mp4"))
         });
 
+    // ── Telegram auth: Mini App / Login Widget ──
+    #[derive(serde::Deserialize)]
+    struct TgLoginBody {
+        #[serde(rename = "initData")]
+        init_data: String,
+    }
+
+    let tg_login_state = state.clone();
+    let api_tg_login = warp::path("api")
+        .and(warp::path("tg"))
+        .and(warp::path("login"))
+        .and(warp::path::end())
+        .and(warp::post())
+        .and(warp::body::json::<TgLoginBody>())
+        .and_then(move |body: TgLoginBody| {
+            let s = tg_login_state.clone();
+            async move {
+                if !s.tg.enabled() {
+                    return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                        warp::reply::json(&serde_json::json!({"error": "tg auth disabled"})),
+                        warp::http::StatusCode::SERVICE_UNAVAILABLE,
+                    ));
+                }
+                match s.tg.verify_init_data(&body.init_data) {
+                    Ok(user) if s.tg.is_allowed(user.id) => {
+                        let session = s.tg.issue_session(user.id);
+                        Ok(warp::reply::with_status(
+                            warp::reply::json(&serde_json::json!({
+                                "session": session,
+                                "user": {
+                                    "id": user.id,
+                                    "username": user.username,
+                                    "first_name": user.first_name,
+                                }
+                            })),
+                            warp::http::StatusCode::OK,
+                        ))
+                    }
+                    Ok(_) => Ok(warp::reply::with_status(
+                        warp::reply::json(&serde_json::json!({"error": "not allowed"})),
+                        warp::http::StatusCode::FORBIDDEN,
+                    )),
+                    Err(_) => Ok(warp::reply::with_status(
+                        warp::reply::json(&serde_json::json!({"error": "invalid"})),
+                        warp::http::StatusCode::UNAUTHORIZED,
+                    )),
+                }
+            }
+        });
+
+    let tg_status_state = state.clone();
+    let api_tg_status = warp::path("api")
+        .and(warp::path("tg"))
+        .and(warp::path("status"))
+        .and(warp::path::end())
+        .and(warp::get())
+        .map(move || {
+            let tg = &tg_status_state.tg;
+            warp::reply::json(&serde_json::json!({
+                "enabled": tg.enabled(),
+                "bot_username": tg.config.bot_username,
+            }))
+        });
+
     let routes = html_route
         .or(screen_live)
         .or(screen_nighthid)
@@ -883,7 +957,9 @@ pub fn start(port: u16, state: Arc<DaemonState>) -> (WsServerHandle, String) {
         .or(api_pair_approve)
         .or(api_pair_reject)
         .or(api_devices_list)
-        .or(api_devices_revoke);
+        .or(api_devices_revoke)
+        .or(api_tg_login)
+        .or(api_tg_status);
 
     let cors = warp::cors()
         .allow_any_origin()
@@ -939,6 +1015,15 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                 }
                 Ok(crate::BroadcastMsg::TerminalResized { id, cols, rows }) => {
                     let msg = serde_json::json!({"type":"resize","id":id,"cols":cols,"rows":rows});
+                    let mut tx = ws_tx2.lock().await;
+                    if tx.send(warp::ws::Message::text(msg.to_string())).await.is_err() {
+                        break;
+                    }
+                }
+                Ok(crate::BroadcastMsg::TerminalControlLost { id }) => {
+                    // Desktop took the terminal — tell the phone to drop to
+                    // passive mode (same signal as a rejected claim).
+                    let msg = serde_json::json!({"type":"resize_rejected","id":id});
                     let mut tx = ws_tx2.lock().await;
                     if tx.send(warp::ws::Message::text(msg.to_string())).await.is_err() {
                         break;
@@ -1032,9 +1117,29 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                         }
                     }
                     Some("resize") => {
-                        // Phone wants to resize the PTY — ignored. The PTY has a fixed
-                        // canonical size set by the desktop. The phone's xterm renders
-                        // at that size and CSS-scales to fit its container.
+                        // Size-gate ("whoever interacted last owns the size"):
+                        //  - `claim: true` (explicit phone tap) — always accept, phone owns.
+                        //  - plain resize — accept only while the phone already owns it.
+                        //  - desktop owns it → reject so the phone drops to passive scale.
+                        if let Some(id) = v["id"].as_str() {
+                            let cols = v["cols"].as_u64().unwrap_or(80) as u16;
+                            let rows = v["rows"].as_u64().unwrap_or(24) as u16;
+                            let claim = v["claim"].as_bool().unwrap_or(false);
+                            let phone_owns = state.active_clients.lock().unwrap()
+                                .get(id).map(|s| s == "ws").unwrap_or(false);
+                            if claim || phone_owns {
+                                if state.pty().resize(id, cols, rows).await.is_ok() {
+                                    state.active_clients.lock().unwrap().insert(id.to_string(), "ws".to_string());
+                                    state.terminal_sizes.lock().unwrap().insert(id.to_string(), (cols, rows));
+                                    state.screen_manager.lock().unwrap().resize(id, rows, cols);
+                                    let _ = state.broadcast_tx.send(crate::BroadcastMsg::TerminalResized { id: id.to_string(), cols, rows });
+                                }
+                            } else {
+                                let msg = serde_json::json!({"type":"resize_rejected","id":id}).to_string();
+                                let mut tx = ws_tx.lock().await;
+                                let _ = tx.send(warp::ws::Message::text(msg)).await;
+                            }
+                        }
                     }
                     Some("get_buffer") => {
                         if let Some(id) = v["id"].as_str() {
@@ -1049,10 +1154,32 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                     Some("get_screen") => {
                         // Clean current-screen snapshot (vt100), for painting a freshly
                         // attached client without replaying scrolled-off history.
+                        // Carries the snapshot's native cols/rows so the client paints
+                        // it at the exact size — otherwise stale cells survive.
                         if let Some(id) = v["id"].as_str() {
-                            let snap = state.screen_manager.lock().unwrap().snapshot(id);
-                            if let Some(data) = snap {
-                                let msg = serde_json::json!({"type":"screen","id":id,"data":data}).to_string();
+                            // Rebuild the vt100 screen from the raw output: set_size()
+                            // collapses wider frames into garbage, and external size
+                            // owners (WT tabs) can resize the conpty behind our back —
+                            // the output stream is the only trustworthy size source.
+                            // All locks live inside this block; nothing crosses an await.
+                            let snap = {
+                                let (fcols, frows) = state.terminal_sizes.lock().unwrap()
+                                    .get(id).copied().unwrap_or((80, 24));
+                                let raw = state.buffer_manager.lock().unwrap().get_bytes(id);
+                                let mut sm = state.screen_manager.lock().unwrap();
+                                let (cols, rows) = match raw {
+                                    Some(raw) => sm.rebuild_from_raw(id, frows, fcols, &raw),
+                                    None => (fcols, frows),
+                                };
+                                drop(sm);
+                                state.terminal_sizes.lock().unwrap().insert(id.to_string(), (cols, rows));
+                                state.screen_manager.lock().unwrap().snapshot_with_size(id)
+                            };
+                            if let Some((data, rows, cols)) = snap {
+                                let msg = serde_json::json!({
+                                    "type": "screen", "id": id, "data": data,
+                                    "cols": cols, "rows": rows
+                                }).to_string();
                                 let mut tx = ws_tx.lock().await;
                                 let _ = tx.send(warp::ws::Message::text(msg)).await;
                             }
@@ -1327,7 +1454,13 @@ async fn handle_ws(ws: warp::ws::WebSocket, state: Arc<DaemonState>, token: Opti
                                 }
                             };
                             if ok {
-                                // Refresh the spawning client's tab list: workspace-filtered when
+                                // Start raw pipe for WT bridge
+                                let st2 = state.clone();
+                                let id2 = id.clone();
+                                tokio::spawn(async move {
+                                    crate::raw_pipe::start_raw_pipe(st2, id2).await;
+                                });
+                                // Refresh the spawning client's tab list
                                 // assigned, otherwise all terminals (no workspaces yet).
                                 let list_msg = {
                                     let ws_data = state.workspace_data.lock().unwrap();

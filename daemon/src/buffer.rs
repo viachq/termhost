@@ -42,6 +42,11 @@ impl BufferManager {
         })
     }
 
+    /// Raw bytes of the terminal's output since the daemon started tracking it.
+    pub fn get_bytes(&self, id: &str) -> Option<Vec<u8>> {
+        self.buffers.get(id).and_then(|buf| buf.lock().ok().map(|b| b.clone()))
+    }
+
     pub fn remove(&mut self, id: &str) {
         self.buffers.remove(id);
     }

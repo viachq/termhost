@@ -7,6 +7,21 @@
 // the installed PWA's home-screen icon (which always opens the bare "/", no
 // query string) still authenticates without re-pairing every time.
 const PAIRED_TOKEN_KEY = "th-paired-token";
+const TG_SESSION_KEY = "th-tg-session";
+
+/** Telegram-auth session token, saved after /api/tg/login succeeds. */
+export function readTgSession(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(TG_SESSION_KEY) || "";
+}
+
+export function saveTgSession(session: string) {
+  localStorage.setItem(TG_SESSION_KEY, session);
+}
+
+export function clearTgSession() {
+  localStorage.removeItem(TG_SESSION_KEY);
+}
 
 function readDevToken(): string {
   if (typeof window === "undefined") return "";
@@ -27,14 +42,22 @@ export const WS_TOKEN: string =
   readDevToken() ||
   readPairedToken();
 
-const tokenParam = WS_TOKEN ? `token=${encodeURIComponent(WS_TOKEN)}` : "";
+// Auth is resolved dynamically: a Telegram session may be saved AFTER module
+// load (login happens at runtime), so it can't be a module-level constant.
+function authParam(): string {
+  const tg = readTgSession();
+  if (tg) return `session=${encodeURIComponent(tg)}`;
+  if (WS_TOKEN) return `token=${encodeURIComponent(WS_TOKEN)}`;
+  return "";
+}
 
-/** Builds a `?...` query string with the token appended (or empty if none). */
+/** Builds a `?...` query string with auth appended (or empty if none). */
 export function apiQuery(params: Record<string, string> = {}): string {
   const parts = Object.entries(params).map(
     ([k, v]) => `${k}=${encodeURIComponent(v)}`
   );
-  if (tokenParam) parts.push(tokenParam);
+  const a = authParam();
+  if (a) parts.push(a);
   return parts.length ? `?${parts.join("&")}` : "";
 }
 
@@ -48,10 +71,11 @@ export function apiOrigin(host: string): string {
   return `${isSecurePage ? "https" : "http"}://${host}`;
 }
 
-/** WebSocket URL with token appended. */
+/** WebSocket URL with auth appended (resolved at call time). */
 export function wsUrl(host: string): string {
   const scheme = isSecurePage ? "wss" : "ws";
-  return `${scheme}://${host}/ws${tokenParam ? `?${tokenParam}` : ""}`;
+  const a = authParam();
+  return `${scheme}://${host}/ws${a ? `?${a}` : ""}`;
 }
 
 /** REST upload URL with optional target directory. */

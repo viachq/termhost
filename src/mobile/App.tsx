@@ -19,6 +19,7 @@ import { FilesPage } from "./components/FilesPage";
 import { SearchBar } from "./components/SearchBar";
 import { SnippetBar } from "./components/SnippetBar";
 import { ScreenView } from "./components/ScreenView";
+import { TerminalViewWrapper } from "./components/TerminalViewWrapper";
 import { haptic } from "./haptics";
 
 type TermSize = { cols: number; rows: number };
@@ -143,8 +144,17 @@ const [activeStates, setActiveStates] = useState<Record<string, boolean>>({});
         case "screen": {
           // Clean current-screen snapshot: reset then paint so a freshly attached
           // phone shows the live screen instead of a blank/scrolled-off terminal.
+          // Paint at the snapshot's NATIVE size — a mismatch (snapshot taken
+          // before/after a resize) leaves ghost cells from the previous frame.
           const term = termRegistry.current.get(msg.id);
           if (term) {
+            if (msg.cols && msg.rows) {
+              term.resize(msg.cols, msg.rows);
+              setSizes((prev) => ({
+                ...prev,
+                [msg.id]: { cols: msg.cols!, rows: msg.rows! },
+              }));
+            }
             term.reset();
             term.write(msg.data);
           }
@@ -155,6 +165,10 @@ const [activeStates, setActiveStates] = useState<Record<string, boolean>>({});
           break;
         case "resize_rejected":
           setActiveStates((prev) => ({ ...prev, [msg.id]: false }));
+          // Control lost (desktop claimed / rejected our resize) — the current
+          // frame may be truncated at phone width. Pull a fresh snapshot at
+          // the canonical size so the screen repaints whole and clean.
+          (window as any).__screenSendRef?.current?.({ type: "get_screen", id: msg.id });
           break;
         case "workspaces":
           setWorkspaces(msg.data, msg.activeIdx);
@@ -252,7 +266,11 @@ const [activeStates, setActiveStates] = useState<Record<string, boolean>>({});
 
   const handleSpawn = useCallback((cwd?: string) => {
     pendingSpawnRef.current = true;
-    send({ type: "spawn", wsIdx: useMobileStore.getState().activeWorkspaceIdx, cwd });
+    // Spawn at a phone-friendly size so the PTY starts right and Claude/shell
+    // draw their first frame at a width that fits — no claim dance needed.
+    const cols = Math.max(20, Math.floor(window.innerWidth / (13 * 0.6)));
+    const rows = Math.max(10, Math.floor(window.innerHeight / (13 * 1.2)));
+    send({ type: "spawn", wsIdx: useMobileStore.getState().activeWorkspaceIdx, cwd, cols, rows });
   }, [send]);
 
 const handleOpenInTerminal = useCallback((cwd: string) => {
@@ -384,7 +402,7 @@ const handleDeleteTerminal = useCallback(
               key={t.id}
               id={t.id}
               active={t.id === activeTerminalId}
-              isActive={activeStates[t.id] ?? true}
+              isActive={activeStates[t.id] ?? false}
               cols={sizes[t.id]?.cols}
               rows={sizes[t.id]?.rows}
               fontSize={fontSize}

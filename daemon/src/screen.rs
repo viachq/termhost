@@ -42,6 +42,99 @@ impl ScreenManager {
         }
     }
 
+    /// Bytes that, written to a fresh terminal, reproduce the current screen,
+    /// plus the screen's native (rows, cols) — the client MUST paint the
+    /// snapshot at exactly this size or stale cells survive the repaint
+    /// (ghost characters like "44" over leftover "332").
+    pub fn snapshot_with_size(&self, id: &str) -> Option<(String, u16, u16)> {
+        self.parsers.get(id).and_then(|p| {
+            p.lock().ok().map(|p| {
+                let s = p.screen();
+                let (rows, cols) = s.size();
+                (
+                    String::from_utf8_lossy(&s.contents_formatted()).into_owned(),
+                    rows as u16,
+                    cols as u16,
+                )
+            })
+        })
+    }
+
+    /// Scan raw output for the largest (row, col) actually drawn — from CSI
+    /// cursor moves (`ESC [ row ; col H|f`) and plain line lengths. External
+    /// size owners (Windows Terminal tabs) can resize the conpty behind
+    /// pty-host's back, so the recorded size lies; the output does not.
+    pub fn scan_max_pos(raw: &[u8]) -> (usize, usize) {
+        let text = String::from_utf8_lossy(raw);
+        let bytes = text.as_bytes();
+        let mut max_row = 0usize;
+        let mut max_col = 0usize;
+        let mut i = 0;
+        while i + 1 < bytes.len() {
+            if bytes[i] == 0x1b && bytes[i + 1] == b'[' {
+                let mut j = i + 2;
+                let mut nums: Vec<usize> = Vec::new();
+                let mut cur = String::new();
+                let mut terminator: Option<u8> = None;
+                while j < bytes.len() {
+                    let b = bytes[j];
+                    if b.is_ascii_digit() {
+                        cur.push(b as char);
+                    } else if b == b';' {
+                        nums.push(cur.parse().unwrap_or(0));
+                        cur.clear();
+                    } else {
+                        if !cur.is_empty() {
+                            nums.push(cur.parse().unwrap_or(0));
+                        }
+                        terminator = Some(b);
+                        break;
+                    }
+                    j += 1;
+                }
+                if let Some(t) = terminator {
+                    if (t == b'H' || t == b'f') && nums.len() >= 2 {
+                        max_row = max_row.max(nums[0]);
+                        max_col = max_col.max(nums[1]);
+                    }
+                }
+                i = j.saturating_add(1);
+            } else {
+                i += 1;
+            }
+        }
+        for line in text.split('\n') {
+            let stripped = line.trim_end_matches('\r');
+            max_col = max_col.max(stripped.chars().count());
+        }
+        (max_row, max_col)
+    }
+
+    /// Rebuild the vt100 screen for `id` from the terminal's RAW output bytes,
+    /// auto-detecting the true frame size. `set_size()` collapses content drawn
+    /// for a wider PTY into garbage (cells merge, lines truncate); replaying the
+    /// raw stream into a fresh parser sized by what the frames ACTUALLY drew
+    /// reproduces the true screen. External size owners (Windows Terminal tabs
+    /// via the bridge) can resize the conpty without pty-host noticing, so the
+    /// recorded size is not trustworthy — the output is.
+    /// Returns the detected (cols, rows).
+    pub fn rebuild_from_raw(&mut self, id: &str, fallback_rows: u16, fallback_cols: u16, raw: &[u8]) -> (u16, u16) {
+        // Detect size from the TAIL of the stream (the last ~8KB = the most
+        // recent frames) — the whole history may contain old wider frames
+        // (e.g. the shell's initial full-width clear) that no longer reflect
+        // the terminal's current size.
+        let scan_window = if raw.len() > 8192 { &raw[raw.len() - 8192..] } else { raw };
+        let (max_row, max_col) = Self::scan_max_pos(scan_window);
+        let rows = (max_row.clamp(10, 200) as u16).max(fallback_rows);
+        let cols = (max_col.clamp(20, 600) as u16).max(fallback_cols.min(40));
+        let p = Arc::new(Mutex::new(vt100::Parser::new(rows, cols, 1000)));
+        if let Ok(mut p) = p.lock() {
+            p.process(raw);
+        }
+        self.parsers.insert(id.to_string(), p);
+        (cols, rows)
+    }
+
     /// Bytes that, written to a fresh terminal, reproduce the current screen.
     pub fn snapshot(&self, id: &str) -> Option<String> {
         self.parsers.get(id).and_then(|p| {
